@@ -57,15 +57,18 @@ class CubeFetcher(object):
 		self._id_matcher = re.compile('\\d+$')
 
 	def _get_tsv(self) -> np.ndarray:
-		response = requests.get(
-			'https://docs.google.com/spreadsheets/d/{}/pub?gid={}&single=true&output=tsv'.format(
-				self._document_id,
-				self._sheet_id,
+		try:
+			response = requests.get(
+				'https://docs.google.com/spreadsheets/d/{}/pub?gid={}&single=true&output=tsv'.format(
+					self._document_id,
+					self._sheet_id,
+				)
 			)
-		)
+		except requests.ConnectionError as e:
+			raise CubeFetchException(e)
 
 		if not response.ok:
-			raise CubeFetchException()
+			raise CubeFetchException(response.status_code)
 
 		return tsv_to_ndarray(
 			response

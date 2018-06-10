@@ -7,14 +7,13 @@ from mtgorp.tools.parsing.search.parse import SearchParser, ParseException
 from misccube.cubeload.load import CubeLoader
 
 
-
 def run():
 
 	db = Loader.load()
 
 	cube_loader = CubeLoader(db)
 
-	cube = cube_loader.get_local_cube()
+	cube = cube_loader.load()
 
 	cardboards = set(printing.cardboard for printing in cube.all_printings)
 
@@ -26,7 +25,7 @@ def run():
 		query = input(': ')
 
 		try:
-			pattern, target = search_parser.parse(query)
+			pattern = search_parser.parse(query)
 		except ParseException as e:
 			print(f'Invalid query "{e}"')
 			continue

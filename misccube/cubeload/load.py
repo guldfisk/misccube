@@ -9,7 +9,11 @@ from mtgorp.models.collections.serilization.strategy import JsonId
 from magiccube.collections.cube import Cube
 
 from misccube import paths
-from misccube.cubeload.fetcher import CubeFetcher
+from misccube.cubeload.fetcher import CubeFetcher, CubeFetchException
+
+
+class CubeLoadException(Exception):
+	pass
 
 
 class CubeLoader(object):
@@ -22,7 +26,7 @@ class CubeLoader(object):
 		self._fetcher = CubeFetcher(self._db)
 		self._strategy = JsonId(self._db)
 
-	def _get_current_local_cube(self) -> t.Optional[Cube]:
+	def _get_all_local_cubes(self) -> t.Iterator[Cube]:
 		if not os.path.exists(self.LOCAL_CUBES_PATH):
 			os.makedirs(self.LOCAL_CUBES_PATH)
 
@@ -47,11 +51,19 @@ class CubeLoader(object):
 		if not names_times:
 			return
 
-		sorted_sets = sorted(names_times, key=lambda item: item[1])
+		sorted_pairs = sorted(names_times, key=lambda item: item[1], reverse = True)
 
-		with open(os.path.join(self.LOCAL_CUBES_PATH, sorted_sets[-1][0]), 'r') as f:
-			return self._strategy.deserialize(Cube, f.read())
+		for name, time in sorted_pairs:
+			with open(os.path.join(self.LOCAL_CUBES_PATH, name), 'r') as f:
+				yield self._strategy.deserialize(Cube, f.read())
 
+
+	def _get_current_local_cube(self) -> t.Optional[Cube]:
+		try:
+			return self._get_all_local_cubes().__next__()
+		except StopIteration:
+			return None
+		
 	@classmethod
 	def _persist_cube(cls, cube: Cube) -> None:
 		if not os.path.exists(cls.LOCAL_CUBES_PATH):
@@ -69,18 +81,32 @@ class CubeLoader(object):
 		) as f:
 			f.write(JsonId.serialize(cube))
 
-	def check_and_update(self) -> None:
+	def check_and_update(self) -> bool:
 		local_cube = self._get_current_local_cube()
-		remote_cube = self._fetcher.fetch_cube()
+		try:
+			remote_cube = self._fetcher.fetch_cube()
+		except CubeFetchException:
+			return False
 
 		if local_cube is None or local_cube != remote_cube:
 			self._persist_cube(remote_cube)
+			return True
 
-	def get_local_cube(self) -> Cube:
+		return False
+
+	def load(self) -> Cube:
 		cube = self._get_current_local_cube()
 
 		if cube is None:
-			self.check_and_update()
+			if not self.check_and_update():
+				raise CubeLoadException()
 			return self._get_current_local_cube()
 
 		return cube
+	
+	def all_cubes(self) -> t.Iterator[Cube]:
+		if self._get_current_local_cube() is None:
+			if not self.check_and_update():
+				raise CubeLoadException()
+			
+		return self._get_all_local_cubes()
