@@ -92,10 +92,11 @@ def run():
 
 	db = Loader.load()
 
-	lapper = LapProxyer(db, margin_size = 1)
+	lapper = LapProxyer(db, margin_size = .3)
 
-	lapper.pdf_difference_images()
+	ret = lapper.pdf_difference_images()
 
+	print(ret[1])
 
 if __name__ == '__main__':
 	run()
