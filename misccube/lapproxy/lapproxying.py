@@ -31,7 +31,7 @@ class LapProxyer(object):
 		self._cube_loader = CubeLoader(self._db)
 		self._image_loader = ImageLoader()
 
-	def proxy_cube(self, cube: Cube, file_name: t.Union[t.BinaryIO, str]):
+	def proxy_cube(self, cube: Cube, file_name: t.Union[t.BinaryIO, str]) -> None:
 
 		traps = list(chain(cube.traps, cube.tickets))
 
@@ -47,12 +47,12 @@ class LapProxyer(object):
 
 		save_proxy_pdf(
 			file = file_name,
-			images=images,
-			margin_size=self.margin_size,
-			card_margin_size=self.card_margin_size,
+			images = images,
+			margin_size = self.margin_size,
+			card_margin_size = self.card_margin_size,
 		)
 
-	def pdf_all_images(self):
+	def pdf_all_images(self) -> None:
 		self.proxy_cube(
 			cube = self._cube_loader.load(),
 			file_name = os.path.join(self.OUT_DIR, 'all_laps.pdf')
@@ -94,9 +94,12 @@ def run():
 
 	lapper = LapProxyer(db, margin_size = .3)
 
-	ret = lapper.pdf_difference_images()
+	lapper.pdf_all_images()
 
-	print(ret[1])
+	# ret = lapper.pdf_difference_images()
+	#
+	# print(ret[1])
+
 
 if __name__ == '__main__':
 	run()

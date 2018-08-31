@@ -4,7 +4,7 @@ import os
 import datetime
 
 from mtgorp.db.database import CardDatabase
-from mtgorp.models.collections.serilization.strategy import JsonId
+from mtgorp.models.serilization.strategies.jsonid import JsonId
 
 from magiccube.collections.cube import Cube
 
