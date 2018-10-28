@@ -9,10 +9,14 @@ import requests
 from mtgorp.db.database import CardDatabase
 from mtgorp.models.persistent.printing import Printing
 
-from magiccube.collections.cube import Cube
+from magiccube.collections.cube import Cube, cubeable
 from magiccube.laps.traps.tree.parse import PrintingTreeParser, PrintingTreeParserException
 from magiccube.laps.traps.trap import Trap
 from magiccube.laps.tickets.ticket import Ticket
+from magiccube.laps.purples.purple import Purple
+
+
+T = t.TypeVar('T', bound = cubeable)
 
 
 DOCUMENT_ID = '1zhZuAAAYZk_f3lCsi0oFXXiRh5jiSMydurKnMYR6HJ8'
@@ -76,7 +80,7 @@ class CubeFetcher(object):
 				.decode('UTF-8')
 		)
 
-	def _parse_lap_cell(self, cell: str) -> Trap:
+	def _parse_trap_cell(self, cell: str) -> Trap:
 		try:
 			return Trap(self._printing_tree_parser.parse(cell))
 		except PrintingTreeParserException as e:
@@ -117,25 +121,46 @@ class CubeFetcher(object):
 			m.group(1)
 		)
 
+	def _parse_purple(self, s: str) -> Purple:
+		return Purple(s)
+
 	def _construct_cube(self, tsv: np.ndarray) -> Cube:
 		traps = []
 		printings = []
 		tickets = []
-		for column in tsv.T:
-			if column[0] == 'TRAPS':
-				for cell in column[2:]:
-					if cell:
-						traps.append(self._parse_lap_cell(cell))
-			elif column[0] in ('W', 'U', 'B', 'R', 'G', 'HYBRID', 'GOLD', 'COLORLESS', 'LAND'):
-				for cell in column[2:]:
-					if cell:
-						printings.append(self._parse_printing(cell))
-			elif column[0] == 'TICKETS':
-				for cell in column[2:]:
-					if cell:
-						tickets.append(self._parse_ticket(cell))
+		purples = []
 
-		return Cube(printings, traps, tickets)
+		exceptions = [] #type: t.List[t.Tuple[str, Exception]]
+
+		def _parse_all_cells(cells: t.Iterable[str], parser: t.Callable[[str], T]) -> t.List[T]:
+			cubeables = []
+			for _cell in cells:
+				if _cell:
+					try:
+						cubeables.append(parser(_cell))
+					except CubeParseException as e:
+						exceptions.append((_cell, e))
+
+			return cubeables
+
+		for column in tsv.T:
+
+			if column[0] == 'TRAPS':
+				traps = _parse_all_cells(column[2:], self._parse_trap_cell)
+
+			elif column[0] in ('W', 'U', 'B', 'R', 'G', 'HYBRID', 'GOLD', 'COLORLESS', 'LAND'):
+				printings.extend(_parse_all_cells(column[2:], self._parse_printing))
+
+			elif column[0] == 'TICKETS':
+				tickets = _parse_all_cells(column[2:], self._parse_ticket)
+
+			elif column[0] == 'PURPLES':
+				purples = _parse_all_cells(column[2:], self._parse_purple)
+
+		if exceptions:
+			raise CubeParseException(exceptions)
+
+		return Cube(printings, traps, tickets, purples)
 
 	def fetch_cube(self) -> Cube:
 		return self._construct_cube(

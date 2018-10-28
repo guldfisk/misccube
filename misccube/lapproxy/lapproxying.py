@@ -9,7 +9,6 @@ from promise import Promise
 
 from proxypdf.write import save_proxy_pdf
 
-from mtgorp.db.database import CardDatabase
 from mtgorp.models.persistent.printing import Printing
 
 from mtgimg.load import Loader as ImageLoader
@@ -23,22 +22,19 @@ from misccube.cubeload.load import CubeLoader
 class LapProxyer(object):
 	OUT_DIR = 'out'
 
-	def __init__(self, db: CardDatabase, margin_size: float = .1, card_margin_size: float = .0):
-		self._db = db
+	def __init__(self, cube_loader: CubeLoader, margin_size: float = .1, card_margin_size: float = .0):
+		self._cube_loader = cube_loader
 		self.margin_size = margin_size
 		self.card_margin_size = card_margin_size
 
-		self._cube_loader = CubeLoader(self._db)
 		self._image_loader = ImageLoader()
 
-	def proxy_cube(self, cube: Cube, file_name: t.Union[t.BinaryIO, str]) -> None:
-
-		traps = list(chain(cube.traps, cube.tickets))
+	def proxy_cube(self, cube: Cube, file_name: t.AnyStr) -> None:
 
 		promises = tuple(
 			self._image_loader.get_image(lap)
 			for lap in
-			traps
+			cube.laps
 		)
 
 		images = Promise.all(
@@ -92,13 +88,20 @@ def run():
 
 	db = Loader.load()
 
-	lapper = LapProxyer(db, margin_size = .3)
+	cube_loader = CubeLoader(db)
+
+	# cube_loader.check_and_update()
+
+	lapper = LapProxyer(cube_loader, margin_size = .3)
 
 	lapper.pdf_all_images()
 
-	# ret = lapper.pdf_difference_images()
-	#
-	# print(ret[1])
+	additional_printings, removed_printings, positive_difference, negative_difference = lapper.pdf_difference_images()
+
+	print('Additional printings: ' + str(additional_printings))
+	print('Removed printings: ' + str(removed_printings))
+	print('Positive difference: ' + str(positive_difference))
+	print('Negative difference: ' + str(negative_difference))
 
 
 if __name__ == '__main__':

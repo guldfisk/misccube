@@ -83,9 +83,11 @@ class CubeLoader(object):
 
 	def check_and_update(self) -> bool:
 		local_cube = self._get_current_local_cube()
+
 		try:
 			remote_cube = self._fetcher.fetch_cube()
-		except CubeFetchException:
+		except CubeFetchException as e:
+			print('CubeFetchException:', e)
 			return False
 
 		if local_cube is None or local_cube != remote_cube:
