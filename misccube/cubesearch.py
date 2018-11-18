@@ -39,7 +39,7 @@ def run():
 						(cardboard.name for cardboard in results),
 					)
 				)
-			+ f'\n\n-------\n{len(results)} results'
+			+ f'\n\n-------\n{len(results)} result{"" if len(results) == 1 else "s"}'
 		)
 
 

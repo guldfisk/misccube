@@ -1,7 +1,6 @@
 import typing as t
 
 import os
-from itertools import chain
 
 from multiset import Multiset
 
@@ -90,9 +89,9 @@ def run():
 
 	cube_loader = CubeLoader(db)
 
-	# cube_loader.check_and_update()
+	cube_loader.check_and_update()
 
-	lapper = LapProxyer(cube_loader, margin_size = .3)
+	lapper = LapProxyer(cube_loader, margin_size = .8)
 
 	lapper.pdf_all_images()
 
