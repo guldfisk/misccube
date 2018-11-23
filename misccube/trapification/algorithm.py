@@ -5,15 +5,14 @@ import random
 import itertools
 import statistics
 
-from multiset import Multiset
+import numpy as np
+import matplotlib.pyplot as plt
 
 from deap import base, creator, tools, algorithms
 
 from mtgorp.models.persistent.attributes.colors import Color
-from mtgorp.models.persistent.printing import Printing
 from mtgorp.utilities.containers import HashableMultiset
 
-from magiccube.collections.cube import cubeable as cubeable_type
 from magiccube.laps.traps.tree.printingtree import AllNode, PrintingNode
 from magiccube.laps.traps.trap import Trap
 
@@ -41,15 +40,6 @@ class ConstrainedNode(object):
 
 		self._hash = hash(self.node)
 
-	def __eq__(self, other):
-		return (
-			isinstance(other, self.__class__)
-			and self.node == other.node
-		)
-
-	def __hash__(self):
-		return self._hash
-
 	def __repr__(self):
 		return f'CC({self.value})'
 
@@ -68,10 +58,8 @@ class TrapDistribution(object):
 		traps: t.Optional[t.List[t.List[ConstrainedNode]]] = None,
 		random_initialization: bool = False
 	):
-		self.traps = None #type: t.List[t.List[ConstrainedNode]]
-
 		if traps is None:
-			self.traps = [[] for _ in range(trap_amount)]
+			self.traps = [[] for _ in range(trap_amount)] #type: t.List[t.List[ConstrainedNode]]
 
 			if random_initialization:
 				for constrained_node in constrained_nodes:
@@ -82,7 +70,7 @@ class TrapDistribution(object):
 					self.traps[i].append(constrained_node)
 
 		else:
-			self.traps = traps
+			self.traps = traps #type: t.List[t.List[ConstrainedNode]]
 
 	@property
 	def as_trap_collection(self) -> HashableMultiset[Trap]:
@@ -145,27 +133,33 @@ def mate(
 	distributor: 'Distributor',
 ) -> t.Tuple[TrapDistribution, TrapDistribution]:
 
-	locations = {cubeable: [] for cubeable in distributor.constrained_nodes}
+	locations = {
+		node: []
+		for node in
+		distributor.constrained_nodes
+	}
 	for grouping in (distribution_1, distribution_2):
 		for i in range(len(grouping.traps)):
-			for cubeable in grouping.traps[i]:
-				locations[cubeable].append(i)
+			for node in grouping.traps[i]:
+				locations[node].append(i)
 
 	for grouping in (distribution_1, distribution_2):
 		groups = [[] for _ in range(distributor.trap_amount)]
-		for cubeable, possibilities in locations.items():
-			groups[random.choice(possibilities)].append(cubeable)
+
+		for node, possibilities in locations.items():
+			groups[random.choice(possibilities)].append(node)
+
 		grouping.traps = groups
 
 	return distribution_1, distribution_2
 
 
-def logistic(x: float, mid: float, slope: float) -> float:
-	return 1 / (1 + math.e ** (slope * (x - mid)))
+def logistic(x: float, max_value: float, mid: float, slope: float) -> float:
+	return max_value / (1 + math.e ** (slope * (x - mid)))
 
 
-def _value_distribution_homogeneity_score(distribution: TrapDistribution, distributor: 'Distributor') -> float:
-	return 1 - sum(
+def value_distribution_homogeneity_factor(distribution: TrapDistribution, distributor: 'Distributor') -> float:
+	return sum(
 		(
 			abs(
 				sum(
@@ -177,7 +171,19 @@ def _value_distribution_homogeneity_score(distribution: TrapDistribution, distri
 			for trap in
 			distribution.traps
 		)
-	) ** .5 / distributor.max_trap_value_deviation
+	) / distributor.max_trap_value_deviation
+
+
+def value_distribution_homogeneity_score(distribution: TrapDistribution, distributor: 'Distributor') -> float:
+	return logistic(
+		x = value_distribution_homogeneity_factor(
+			distribution,
+			distributor
+		),
+		max_value = 2,
+		mid = 0,
+		slope = 100,
+	)
 
 
 def _group_collision_factor(distribution: TrapDistribution, distributor: 'Distributor') -> int:
@@ -205,9 +211,9 @@ def _group_collision_factor(distribution: TrapDistribution, distributor: 'Distri
 
 		collision_factor += sum(
 			(
-				max(node.value for node in nodes)
+				sum(node.value for node in nodes)
 				* max(distributor.get_group_weight(group) for group in groups)
-			)
+			) ** 1.5
 			for nodes, groups in
 			collisions.items()
 		)
@@ -215,58 +221,87 @@ def _group_collision_factor(distribution: TrapDistribution, distributor: 'Distri
 	return collision_factor
 
 
-def _group_exclusivity_score(distribution: TrapDistribution, distributor: 'Distributor') -> float:
+def group_exclusivity_factor(distribution: TrapDistribution, distributor: 'Distributor') -> float:
+	return _group_collision_factor(
+		distribution,
+		distributor
+	) / (distributor.average_group_collision_factor + 1)
+
+
+def group_exclusivity_score(distribution: TrapDistribution, distributor: 'Distributor') -> float:
 	return logistic(
-		x =_group_collision_factor(distribution, distributor) / (distributor.average_group_collision_factor + 1),
-		mid = 1.,
-		slope = 3.,
+		x = group_exclusivity_factor(
+			distribution,
+			distributor,
+		),
+		max_value = 2,
+		mid = 0,
+		slope = 15,
 	)
 
 
-def _trap_size_homogeneity_score(distribution: TrapDistribution, distributor: 'Distributor') -> float:
-	return 1 - sum(
+def trap_size_homogeneity_factor(distribution: TrapDistribution, distributor: 'Distributor') -> float:
+	return sum(
 		abs(
 			len(trap) - distributor.average_trap_size
 		) ** 2
 		for trap in
 		distribution.traps
-	) ** .5 / distributor.max_trap_size_heterogeneity
+	) / distributor.max_trap_size_heterogeneity
 
 
-def distribution_score(distribution: TrapDistribution, distributor: 'Distributor') -> t.Tuple[float]:
+def size_homogeneity_score(distribution: TrapDistribution, distributor: 'Distributor') -> float:
+	return logistic(
+		x = trap_size_homogeneity_factor(
+			distribution,
+			distributor,
+		),
+		max_value = 2,
+		mid = 0,
+		slope = 100,
+	)
+
+
+def trap_distribution_score(distribution: TrapDistribution, distributor: 'Distributor') -> t.Tuple[float]:
 	return (
-		2 * _value_distribution_homogeneity_score(
+			   value_distribution_homogeneity_score(
 			distribution,
 			distributor,
-		) +
-		2 * _group_exclusivity_score(
+		) ** 2
+			   * group_exclusivity_score(
 			distribution,
 			distributor,
-		) +
-		1 * _trap_size_homogeneity_score(
-		   distribution,
-		   distributor,
+		) ** 2
+			   * size_homogeneity_score(
+			distribution,
+			distributor,
 		)
-   ) / 5,
+   ),
 
 
 class Distributor(object):
 
 	def __init__(
 		self,
-		cubeables: t.Iterable[ConstrainedNode],
+		constrained_nodes: t.Iterable[ConstrainedNode],
 		trap_amount: int,
 		group_weights: t.Dict[str, float] = None,
+		mate_chance: float = .5,
+		mutate_chance: float = .2,
+		tournament_size: int = 3,
 	):
-		self._constrained_nodes = frozenset(cubeables)
+		self._constrained_nodes = list(constrained_nodes)
 		self._trap_amount = trap_amount
 		self._group_weights = {} if group_weights is None else group_weights
+		self._mate_chance = mate_chance
+		self._mutate_chance = mutate_chance
+		self._tournament_size = tournament_size
 
 		self._average_trap_size = len(self._constrained_nodes) / self._trap_amount
 		self._max_trap_size_heterogeneity = (
 			(len(self._constrained_nodes) - self._average_trap_size) ** 2
 			+ self._average_trap_size ** 2 * (self._trap_amount - 1)
-		) ** .5
+		)
 
 		_sum_values = sum(
 			(
@@ -280,14 +315,60 @@ class Distributor(object):
 		self._max_trap_value_deviation = (
 			 (_sum_values - self._average_trap_value) ** 2
 			 + self._average_trap_value ** 2 * (self._trap_amount - 1)
-		) ** .5
+		)
 
 		self._expected_trap_size = len(self._constrained_nodes) / self._trap_amount
 
 		self._average_group_collision_factor = None #type: float
 
-		self._population = None #type: t.List[TrapDistribution]
-		self._best = None #type: TrapDistribution
+		creator.create('Fitness', base.Fitness, weights=(1.,))
+		creator.create('Individual', TrapDistribution, fitness=creator.Fitness)
+
+		self._toolbox = base.Toolbox()
+
+		self._toolbox.register(
+			'individual',
+			creator.Individual,
+			constrained_nodes = self._constrained_nodes,
+			trap_amount = self._trap_amount,
+			random_initialization = True,
+		)
+		self._toolbox.register('population', tools.initRepeat, list, self._toolbox.individual)
+
+		self._toolbox.register('evaluate', trap_distribution_score, distributor=self)
+		self._toolbox.register('mate', mate, distributor=self)
+		self._toolbox.register('mutate', mutate_cubeables_groups)
+		self._toolbox.register('select', tools.selTournament, tournsize=self._tournament_size)
+
+		averaging_group_amount = 100
+
+		self._average_group_collision_factor = statistics.mean(
+			_group_collision_factor(
+				TrapDistribution(
+					constrained_nodes=self._constrained_nodes,
+					trap_amount=self._trap_amount,
+					random_initialization=True,
+				),
+				self,
+			) for _ in
+			range(averaging_group_amount)
+		) #type: float
+
+		self._population = self._toolbox.population(n=300) #type: t.List[TrapDistribution]
+		self._best = None
+
+		self._statistics = tools.Statistics(key=lambda ind: ind)
+		self._statistics.register('avg', lambda s: statistics.mean(e.fitness.values[0] for e in s))
+		self._statistics.register('max', lambda s: max(e.fitness.values[0] for e in s))
+		self._statistics.register('val', lambda s: max(value_distribution_homogeneity_score(e, self) for e in s))
+		self._statistics.register('siz', lambda s: max(size_homogeneity_score(e, self) for e in s))
+		self._statistics.register('grp', lambda s: max(group_exclusivity_score(e, self) for e in s))
+
+		self._logbook = None #type: tools.Logbook
+
+	@property
+	def population(self) -> t.List[TrapDistribution]:
+		return self._population
 
 	@property
 	def average_trap_size(self) -> float:
@@ -305,7 +386,7 @@ class Distributor(object):
 		return self._best
 
 	@property
-	def constrained_nodes(self) -> t.FrozenSet[ConstrainedNode]:
+	def constrained_nodes(self) -> t.List[ConstrainedNode]:
 		return self._constrained_nodes
 
 	@property
@@ -331,69 +412,69 @@ class Distributor(object):
 	def get_group_weight(self, group: str) -> float:
 		return self._group_weights.get(group, 1.)
 
-	def evaluate(self, generations: int = 100) -> 'Distributor':
-		creator.create('Fitness', base.Fitness, weights=(1.,))
-		creator.create('Individual', TrapDistribution, fitness=creator.Fitness)
+	def evaluate_cube(self, traps: t.Collection[Trap]) -> float:
 
-		toolbox = base.Toolbox()
+		index_map = {}  # type: t.Dict[PrintingNode, int]
 
-		toolbox.register(
-			'individual',
-			creator.Individual,
-			constrained_nodes = self._constrained_nodes,
-			trap_amount = self._trap_amount,
-		)
-		toolbox.register('population', tools.initRepeat, list, toolbox.individual)
+		for index, trap in enumerate(traps):
+			for child in trap.node.children:
+				index_map[child if isinstance(child, PrintingNode) else AllNode((child,))] = index
 
-		toolbox.register('evaluate', distribution_score, distributor=self)
-		toolbox.register('mate', mate, distributor=self)
-		toolbox.register('mutate', mutate_cubeables_groups)
-		toolbox.register('select', tools.selTournament, tournsize=3)
+		traps = [[] for _ in range(len(traps))]
 
-		averaging_group_amount = 100
+		for node in self._constrained_nodes:
+			try:
+				traps[index_map[node.node]].append(node)
+			except KeyError as e:
+				if isinstance(node.node, AllNode):
+					traps[index_map[AllNode((node.node.children.__iter__().__next__(),))]].append(node)
+				else:
+					raise e
 
-		self._average_group_collision_factor = statistics.mean(
-			_group_collision_factor(
-				TrapDistribution(
-					constrained_nodes = self._constrained_nodes,
-					trap_amount = self._trap_amount,
-					random_initialization = True,
-				),
-				self,
-			) for _ in
-			range(averaging_group_amount)
-		)
+		distribution = TrapDistribution(traps=traps)
 
-		population = toolbox.population(n=300)
+		return trap_distribution_score(
+			distribution,
+			self,
+		)[0]
 
-		for individual in population:
-			individual.fitness.value = toolbox.evaluate(individual)
+	def show_plot(self) -> 'Distributor':
+		generations = self._logbook.select("gen")
+		fit_maxes = self._logbook.select('max')
+		fit_averages = self._logbook.select('avg')
 
-		print(
-			tools.selBest(population, 1)[0].fitness.value
-		)
+		value_distribution_homogeneity_scores = self._logbook.select('val')
+		size_homogeneity_scores = self._logbook.select('siz')
+		group_exclusivity_scores = self._logbook.select('grp')
 
-		cxpb, mutpb = .5, .2
+		fig, ax1 = plt.subplots()
 
-		population, stats = algorithms.eaSimple(
-			population,
-			toolbox,
-			cxpb,
-			mutpb,
-			generations,
-		)
+		max_line = plt.plot(generations, fit_maxes, 'k', label='Maximum Fitness')
+		average_line = plt.plot(generations, fit_averages, '.75', label='Average Fitness')
+		value_line = plt.plot(generations, value_distribution_homogeneity_scores, 'r', label='Max Value Distribution Homogeneity Score')
+		size_line = plt.plot(generations, size_homogeneity_scores, 'g', label='Max Size Homogeneity Score')
+		group_line = plt.plot(generations, group_exclusivity_scores, 'b', label='Max Group Exclusivity Score')
 
-		self._population = population
-		self._best = None
+		lns = max_line + average_line + value_line + size_line + group_line
+		labs = [l.get_label() for l in lns]
+		ax1.legend(lns, labs, loc="bottom right")
+
+		plt.show()
 
 		return self
 
+	def evaluate(self, generations: int) -> 'Distributor':
+		population, logbook = algorithms.eaSimple(
+			self._population,
+			self._toolbox,
+			self._mate_chance,
+			self._mutate_chance,
+			generations,
+			stats = self._statistics,
+		)
 
+		self._population = population
+		self._logbook = logbook
+		self._best = None
 
-
-
-
-
-if __name__ == '__main__':
-	main()
-	# test()
+		return self

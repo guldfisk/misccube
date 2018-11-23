@@ -3,35 +3,43 @@ import typing as t
 import time
 import random
 import os
+import statistics
 
 from promise import Promise
 
 from proxypdf.write import save_proxy_pdf
 
 from mtgorp.db.load import Loader
+from mtgorp.db.database import CardDatabase
+from mtgorp.utilities.containers import HashableMultiset
 
 from mtgimg.load import Loader as ImageLoader
 
 from magiccube.laps.lap import Lap
+from magiccube.laps.traps.trap import IntentionType
+from magiccube.laps.traps.tree.printingtree import AllNode, PrintingNode
+from magiccube.collections.cube import Cube
 
-from misccube.trapification.fetch import ConstrainedCubeableFetcher, ConstrainedCubeablesFetchException
-from misccube.trapification.algorithm import ConstrainedNode, Distributor, TrapDistribution
+from misccube.cubeload.load import CubeLoader
+from misccube.trapification.fetch import ConstrainedNodeFetcher, ConstrainedCubeablesFetchException
+from misccube.trapification.algorithm import ConstrainedNode, Distributor, TrapDistribution, trap_distribution_score
 from misccube.trapification import algorithm
 from misccube import paths
 
 
-OUT_PATH = os.path.join(paths.OUT_DIR, 'trap_distribution_out.pdf')
+GARBAGE_OUT_PATH = os.path.join(paths.OUT_DIR, 'garbage_distribution.pdf')
+GARBAGE_LANDS_OUT_PATH = os.path.join(paths.OUT_DIR, 'garbage_lands_distribution.pdf')
 
 
 def proxy_laps(
 	laps: t.Iterable[Lap],
 	image_loader: ImageLoader,
-	file_name: str = OUT_PATH,
+	file_name: str = GARBAGE_OUT_PATH,
 	margin_size: float = .1,
 	card_margin_size: float = .01,
 ) -> None:
 	promises = tuple(
-		image_loader.get_image(lap)
+		image_loader.get_image(lap, save=False)
 		for lap in
 		laps
 	)
@@ -48,7 +56,7 @@ def proxy_laps(
 	)
 
 
-GROUP_WEIGHTS = {
+_GROUP_WEIGHTS = {
 	'WHITE': 1,
 	'BLUE': 1,
 	'BLACK': 1,
@@ -79,90 +87,123 @@ GROUP_WEIGHTS = {
 	'counter': 3,
 	'discard': 2,
 	'cantrip': 4,
+	'balance': 3,
+	'stasis': 4,
+	'standstill': 3,
+	'whitehate': 4,
+	'bluehate': 4,
+	'blackhate': 4,
+	'redhate': 4,
+	'greenhate': 4,
+	'antiwaste': 4,
+	'delirium': 3,
+	'sacvalue': 1,
+	'lowtoughnesshate': 4,
+	'yardhate': 4,
+	'armageddon': 4,
+	'stax': 3,
+	'bloom': 3,
+	# lands
+	'fixing': 3,
+	'colorlessvalue': 1,
+	'fetchable': 2,
+	'indestructable': 4,
+	'legendarymatters': 1,
+	'sol': 3,
+	'manland': 4,
+	'storage': 3,
 }
 
-def main():
+
+GROUP_WEIGHT_EXPONENT = 1.5
+
+
+GROUP_WEIGHTS = {key: value ** GROUP_WEIGHT_EXPONENT for key, value in _GROUP_WEIGHTS.items()}
+
+
+def calculate(lands: bool = False):
 	random.seed()
 
 	db = Loader.load()
-
 	image_loader = ImageLoader()
-
-	fetcher = ConstrainedCubeableFetcher(db)
-
-	constrained_cubeables = fetcher.fetch()
-
-	# constrained_cubeables = random.sample(constrained_cubeables, len(constrained_cubeables))
-
-	distributor = Distributor(constrained_cubeables, 44, GROUP_WEIGHTS)
-
-	st = time.time()
-
-	winner = distributor.evaluate(130).best
-
-	print(time.time() - st, winner.fitness)
-	print(distributor.max_trap_value_deviation, winner.fitness)
-
-	for trap in winner.traps:
-		print(trap, sum(constrained_cubeables.value for constrained_cubeables in trap))
-
-	print('--')
-
-	traps = winner.as_trap_collection
-
-	proxy_laps(traps, image_loader)
-
-
-def evaluate_current_cube():
-	db = Loader.load()
-
-	from misccube.cubeload.load import CubeLoader
-	from magiccube.laps.traps.trap import IntentionType
-	from magiccube.laps.traps.tree.printingtree import AllNode, PrintingNode
-
+	fetcher = ConstrainedNodeFetcher(db)
 	cube_loader = CubeLoader(db)
 
-	cube_loader.check_and_update()
+	constrained_nodes = fetcher.fetch_garbage_lands() if lands else fetcher.fetch_garbage()
+
+	print(f'loaded {len(constrained_nodes)} nodes')
 
 	cube = cube_loader.load()
 
-	fetcher = ConstrainedCubeableFetcher(db)
-
-	constrained_nodes = fetcher.fetch()
-
-	garbage_traps = [trap for trap in cube.traps if trap.intention_type == IntentionType.GARBAGE]
-
-	index_map = {} #type: t.Dict[PrintingNode, int]
-
-	for index, trap in enumerate(garbage_traps):
-		for child in trap.node.children:
-			index_map[child if isinstance(child, PrintingNode) else AllNode((child,))] = index
-
-	traps = [[] for _ in range(len(garbage_traps))]
-
-	for node in constrained_nodes:
-		try:
-			traps[index_map[node.node]].append(node)
-		except KeyError as e:
-			if isinstance(node.node, AllNode):
-				traps[index_map[AllNode((node.node.children.__iter__().__next__(),))]].append(node)
-			else:
-				raise e
-
-	distribution = TrapDistribution(
-		traps = traps
+	distributor = Distributor(
+		constrained_nodes = constrained_nodes,
+		trap_amount = 22 if lands else 44,
+		group_weights = GROUP_WEIGHTS,
+		mate_chance = .45,
+		mutate_chance = .2,
+		tournament_size = 4,
 	)
 
-	distributor = Distributor(constrained_nodes, len(garbage_traps), GROUP_WEIGHTS).evaluate(0)
+	cube_traps = HashableMultiset(
+		trap
+		for trap in
+		cube.traps
+		if trap.intention_type == (
+			IntentionType.LAND_GARBAGE
+			if lands else
+			IntentionType.GARBAGE
+		)
+	)
 
+	cube_fitness = distributor.evaluate_cube(cube_traps)
+
+	print('Current cube fitness:', cube_fitness)
+
+	random_fitness = statistics.mean(
+		trap_distribution_score(distribution, distributor)[0]
+		for distribution in
+		distributor.population
+	)
+
+	print('Random fitness:', random_fitness)
+
+	st = time.time()
+
+	winner = distributor.evaluate(150).best
+
+	print(f'Done in {time.time() - st} seconds')
+	print('Winner fitness:', winner.fitness.values[0])
 	print(
-		algorithm.distribution_score(
-			distribution,
+		'val:', algorithm.value_distribution_homogeneity_score(
+			winner,
+			distributor,
+		),
+		'size:', algorithm.size_homogeneity_score(
+			winner,
+			distributor,
+		),
+		'group', algorithm.group_exclusivity_score(
+			winner,
 			distributor,
 		)
 	)
 
-	# vs: .9625556483124305
+	distributor.show_plot()
+
+	winner_traps = winner.as_trap_collection
+
+	proxy_laps(
+		laps = winner_traps,
+		image_loader = image_loader,
+		file_name = GARBAGE_LANDS_OUT_PATH if lands else GARBAGE_OUT_PATH,
+	)
+
+	print('proxying done')
+
+
+def main():
+	lands = False
+	calculate(lands)
 
 
 if __name__ == '__main__':

@@ -1,16 +1,13 @@
 import typing as t
 
-import re
 
 from sheetclient.client import GoogleSheetClient
 
 from mtgorp.db.database import CardDatabase
 
 from magiccube.laps.traps.tree.parse import PrintingTreeParser, PrintingTreeParserException
-from magiccube.laps.traps.trap import Trap
-from magiccube.laps.traps.tree.printingtree import PrintingNode
 
-from misccube.trapification.algorithm import ConstrainedNode, TrapDistribution
+from misccube.trapification.algorithm import ConstrainedNode
 from misccube import values
 
 
@@ -20,7 +17,7 @@ class ConstrainedCubeablesFetchException(Exception):
 
 
 
-class ConstrainedCubeableFetcher(object):
+class ConstrainedNodeFetcher(object):
 	SHEET_NAME = 'trapables'
 
 	_value_value_map = {
@@ -32,6 +29,11 @@ class ConstrainedCubeableFetcher(object):
 	}
 
 	_legal_groups = {
+		'WHITE',
+		'BLUE',
+		'BLACK',
+		'RED',
+		'GREEN',
 		'drawgo',
 		'mud',
 		'post',
@@ -57,6 +59,31 @@ class ConstrainedCubeableFetcher(object):
 		'counter',
 		'discard',
 		'cantrip',
+		'balance',
+		'stasis',
+		'standstill',
+		'whitehate',
+		'bluehate',
+		'blackhate',
+		'redhate',
+		'greenhate',
+		'antiwaste',
+		'delirium',
+		'sacvalue',
+		'lowtoughnesshate',
+		'yardhate',
+		'armageddon',
+		'stax',
+		'bloom',
+		# lands
+		'fixing',
+		'colorlessvalue',
+		'fetchable',
+		'indestructable',
+		'legendarymatters',
+		'sol',
+		'manland',
+		'storage',
 	}
 
 	def __init__(self, db: CardDatabase, document_id: str = values.DOCUMENT_ID):
@@ -79,15 +106,15 @@ class ConstrainedCubeableFetcher(object):
 
 		return frozenset(groups)
 
-	def fetch(self) -> t.List[ConstrainedNode]:
+	def _fetch(self, start_column: int) -> t.List[ConstrainedNode]:
 		exceptions = []
 		constrained_cubeables = []
 
 		for row in self._sheet_client.read_sheet(
 			self.SHEET_NAME,
-			start_column = 1,
+			start_column = start_column,
 			start_row = 4,
-			end_column = 4,
+			end_column = start_column + 3,
 			end_row = 500,
 		):
 			amount_cell, printings_cell, value_cell = row[:3]
@@ -130,3 +157,8 @@ class ConstrainedCubeableFetcher(object):
 
 		return constrained_cubeables
 
+	def fetch_garbage(self) -> t.List[ConstrainedNode]:
+		return self._fetch(1)
+
+	def fetch_garbage_lands(self) -> t.List[ConstrainedNode]:
+		return self._fetch(5)
