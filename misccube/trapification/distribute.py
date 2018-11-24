@@ -28,13 +28,15 @@ from misccube import paths
 
 
 GARBAGE_OUT_PATH = os.path.join(paths.OUT_DIR, 'garbage_distribution.pdf')
+GARBAGE_NEW_OUT_PATH = os.path.join(paths.OUT_DIR, 'garbage_distribution_new.pdf')
+GARBAGE_REMOVED_OUT_PATH = os.path.join(paths.OUT_DIR, 'garbage_distribution_removed.pdf')
 GARBAGE_LANDS_OUT_PATH = os.path.join(paths.OUT_DIR, 'garbage_lands_distribution.pdf')
 
 
 def proxy_laps(
 	laps: t.Iterable[Lap],
 	image_loader: ImageLoader,
-	file_name: str = GARBAGE_OUT_PATH,
+	file_name: str,
 	margin_size: float = .1,
 	card_margin_size: float = .01,
 ) -> None:
@@ -138,6 +140,17 @@ def calculate(lands: bool = False):
 
 	cube = cube_loader.load()
 
+	cube_traps = HashableMultiset(
+		trap
+		for trap in
+		cube.traps
+		if trap.intention_type == (
+			IntentionType.LAND_GARBAGE
+			if lands else
+			IntentionType.GARBAGE
+		)
+	)
+
 	blue_print = ConstraintSetBluePrint(
 		(
 			algorithm.ValueDistributionHomogeneityConstraint,
@@ -154,6 +167,11 @@ def calculate(lands: bool = False):
 			1,
 			{},
 		),
+		# (
+		# 	algorithm.DivergenceConstraint,
+		# 	4,
+		# 	{'origin': cube_traps},
+		# )
 	)
 
 	distributor = Distributor(
@@ -163,17 +181,7 @@ def calculate(lands: bool = False):
 		mate_chance = .35,
 		mutate_chance = .15,
 		tournament_size = 4,
-	)
-
-	cube_traps = HashableMultiset(
-		trap
-		for trap in
-		cube.traps
-		if trap.intention_type == (
-			IntentionType.LAND_GARBAGE
-			if lands else
-			IntentionType.GARBAGE
-		)
+		# seed_trap_collection = cube_traps,
 	)
 
 	cube_fitness = distributor.evaluate_cube(cube_traps)
@@ -184,7 +192,7 @@ def calculate(lands: bool = False):
 
 	st = time.time()
 
-	winner = distributor.evaluate(1000).best
+	winner = distributor.evaluate(100).best
 
 	print(f'Done in {time.time() - st} seconds')
 
@@ -197,10 +205,27 @@ def calculate(lands: bool = False):
 
 	winner_traps = winner.as_trap_collection
 
+	new_traps = winner_traps - cube_traps
+	removed_traps = cube_traps - winner_traps
+
+	print('New traps', len(new_traps))
+
 	proxy_laps(
 		laps = winner_traps,
 		image_loader = image_loader,
 		file_name = GARBAGE_LANDS_OUT_PATH if lands else GARBAGE_OUT_PATH,
+	)
+
+	proxy_laps(
+		laps = new_traps,
+		image_loader = image_loader,
+		file_name = GARBAGE_LANDS_OUT_PATH if lands else GARBAGE_NEW_OUT_PATH,
+	)
+
+	proxy_laps(
+		laps = removed_traps,
+		image_loader = image_loader,
+		file_name = GARBAGE_LANDS_OUT_PATH if lands else GARBAGE_REMOVED_OUT_PATH,
 	)
 
 	print('proxying done')

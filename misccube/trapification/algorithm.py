@@ -284,6 +284,28 @@ class ValueDistributionHomogeneityConstraint(Constraint):
 		)
 
 
+class DivergenceConstraint(Constraint):
+	description = 'Divergence'
+
+	def __init__(
+		self,
+		constrained_nodes: t.FrozenSet[ConstrainedNode],
+		trap_amount: int,
+		random_population: t.Collection[TrapDistribution],
+		origin: HashableMultiset[Trap],
+	):
+		super().__init__(constrained_nodes, trap_amount, random_population)
+		self._origin = origin
+
+	def score(self, distribution: TrapDistribution) -> float:
+		return logistic(
+			x = len(self._origin - distribution.as_trap_collection) / len(self._origin),
+			max_value = 2,
+			mid = 0,
+			slope = 15,
+		)
+
+
 class GroupExclusivityConstraint(Constraint):
 	description = 'Group exclusivity'
 
@@ -415,6 +437,7 @@ class Distributor(object):
 		mutate_chance: float = .2,
 		tournament_size: int = 3,
 		population_size: int = 300,
+		seed_trap_collection: t.Optional[t.Collection[Trap]] = None,
 	):
 		self._constrained_nodes = frozenset(constrained_nodes)
 		self._trap_amount = trap_amount
@@ -423,6 +446,8 @@ class Distributor(object):
 		self._mutate_chance = mutate_chance
 		self._tournament_size = tournament_size
 		self._population_size = population_size
+
+		self._seed_trap_collection = seed_trap_collection
 
 
 		self._toolbox = base.Toolbox()
@@ -436,13 +461,25 @@ class Distributor(object):
 		)
 		self._toolbox.register('population', tools.initRepeat, list, self._toolbox.individual)
 
-		self._population = self._toolbox.population(n=population_size) #type: t.List[TrapDistribution]
+		self._population = self._toolbox.population(n=self._population_size) #type: t.List[TrapDistribution]
+		self._sample_random_population = self._population
 
 		self._constraint_set = self._constraint_set_blue_print.realise(
 			self._constrained_nodes,
 			self._trap_amount,
-			self._population,
+			self._sample_random_population,
 		)
+
+		if self._seed_trap_collection is not None:
+			self._population = [
+				self._toolbox.individual(
+					traps = self._trap_collection_to_trap_distribution(
+						self._seed_trap_collection
+					).traps
+				)
+				for _ in
+				range(self._population_size)
+			]
 
 		self._toolbox.register('evaluate', lambda d: (self._constraint_set.score(d),))
 		self._toolbox.register('mate', mate_distributions, distributor=self)
@@ -476,6 +513,10 @@ class Distributor(object):
 		return self._population
 
 	@property
+	def sample_random_population(self) -> t.List[TrapDistribution]:
+		return self._sample_random_population
+
+	@property
 	def best(self) -> TrapDistribution:
 		if self._best is None:
 			self._best = tools.selBest(self._population, 1)[0]
@@ -494,8 +535,7 @@ class Distributor(object):
 	def constraint_set(self) -> ConstraintSet:
 		return self._constraint_set
 
-	def evaluate_cube(self, traps: t.Collection[Trap]) -> float:
-
+	def _trap_collection_to_trap_distribution(self, traps: t.Collection[Trap]) -> TrapDistribution:
 		index_map = {}  # type: t.Dict[PrintingNode, int]
 
 		for index, trap in enumerate(traps):
@@ -513,10 +553,11 @@ class Distributor(object):
 				else:
 					raise e
 
-		distribution = TrapDistribution(traps=traps)
+		return TrapDistribution(traps=traps)
 
+	def evaluate_cube(self, traps: t.Collection[Trap]) -> float:
 		return self._constraint_set.score(
-			distribution,
+			self._trap_collection_to_trap_distribution(traps)
 		)
 
 	def show_plot(self) -> 'Distributor':
