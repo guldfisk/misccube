@@ -22,7 +22,7 @@ from magiccube.collections.cube import Cube
 
 from misccube.cubeload.load import CubeLoader
 from misccube.trapification.fetch import ConstrainedNodeFetcher, ConstrainedCubeablesFetchException
-from misccube.trapification.algorithm import ConstrainedNode, Distributor, TrapDistribution, trap_distribution_score
+from misccube.trapification.algorithm import ConstrainedNode, Distributor, TrapDistribution, ConstraintSetBluePrint
 from misccube.trapification import algorithm
 from misccube import paths
 
@@ -58,7 +58,7 @@ def proxy_laps(
 
 _GROUP_WEIGHTS = {
 	'WHITE': 1,
-	'BLUE': 1,
+	'BLUE': 1.5,
 	'BLACK': 1,
 	'RED': 1,
 	'GREEN': 1,
@@ -103,6 +103,9 @@ _GROUP_WEIGHTS = {
 	'armageddon': 4,
 	'stax': 3,
 	'bloom': 3,
+	'weldingjar': 3,
+	'drawhate': 4,
+	'pluscard': 3,
 	# lands
 	'fixing': 3,
 	'colorlessvalue': 1,
@@ -135,12 +138,30 @@ def calculate(lands: bool = False):
 
 	cube = cube_loader.load()
 
+	blue_print = ConstraintSetBluePrint(
+		(
+			algorithm.ValueDistributionHomogeneityConstraint,
+			2,
+			{},
+		),
+		(
+			algorithm.GroupExclusivityConstraint,
+			2,
+			{'group_weights': GROUP_WEIGHTS},
+		),
+		(
+			algorithm.SizeHomogeneityConstraint,
+			1,
+			{},
+		),
+	)
+
 	distributor = Distributor(
 		constrained_nodes = constrained_nodes,
 		trap_amount = 22 if lands else 44,
-		group_weights = GROUP_WEIGHTS,
-		mate_chance = .45,
-		mutate_chance = .2,
+		constraint_set_blue_print = blue_print,
+		mate_chance = .35,
+		mutate_chance = .15,
 		tournament_size = 4,
 	)
 
@@ -157,36 +178,20 @@ def calculate(lands: bool = False):
 
 	cube_fitness = distributor.evaluate_cube(cube_traps)
 
-	print('Current cube fitness:', cube_fitness)
-
 	random_fitness = statistics.mean(
-		trap_distribution_score(distribution, distributor)[0]
-		for distribution in
-		distributor.population
+		map(distributor.constraint_set.score, distributor.population)
 	)
-
-	print('Random fitness:', random_fitness)
 
 	st = time.time()
 
-	winner = distributor.evaluate(150).best
+	winner = distributor.evaluate(1000).best
 
 	print(f'Done in {time.time() - st} seconds')
+
+	print('Random fitness:', random_fitness)
+	print('Current cube fitness:', cube_fitness)
+
 	print('Winner fitness:', winner.fitness.values[0])
-	print(
-		'val:', algorithm.value_distribution_homogeneity_score(
-			winner,
-			distributor,
-		),
-		'size:', algorithm.size_homogeneity_score(
-			winner,
-			distributor,
-		),
-		'group', algorithm.group_exclusivity_score(
-			winner,
-			distributor,
-		)
-	)
 
 	distributor.show_plot()
 

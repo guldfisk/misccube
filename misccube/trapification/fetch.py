@@ -75,6 +75,9 @@ class ConstrainedNodeFetcher(object):
 		'armageddon',
 		'stax',
 		'bloom',
+		'weldingjar',
+		'drawhate',
+		'pluscard',
 		# lands
 		'fixing',
 		'colorlessvalue',
