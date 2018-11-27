@@ -714,7 +714,15 @@ class Distributor(object):
 				self._index = _index
 
 			def __call__(self, population: t.Collection[TrapDistribution]):
-				return max(individual.fitness.values[self._index] for individual in population)
+				return sorted(
+					(
+						individual
+						for individual in
+						population
+					),
+					key = lambda individual:
+						individual.fitness.values[0]
+				)[-1].fitness.values[self._index]
 
 		for index, constraint in enumerate(self._constraint_set):
 			self._statistics.register(

@@ -21,6 +21,7 @@ class ConstrainedNodeFetcher(object):
 	SHEET_NAME = 'trapables'
 
 	_value_value_map = {
+		0: 0,
 		1:  1,
 		2: 5,
 		3: 15,
@@ -71,13 +72,18 @@ class ConstrainedNodeFetcher(object):
 		'delirium',
 		'sacvalue',
 		'lowtoughnesshate',
-		'yardhate',
 		'armageddon',
 		'stax',
 		'bloom',
 		'weldingjar',
 		'drawhate',
 		'pluscard',
+		'ramp',
+		'devoteddruid',
+		'fetchhate',
+		'dragon',
+		'company',
+		'naturalorder',
 		# lands
 		'fixing',
 		'colorlessvalue',
@@ -87,6 +93,7 @@ class ConstrainedNodeFetcher(object):
 		'sol',
 		'manland',
 		'storage',
+		'croprotate',
 	}
 
 	def __init__(self, db: CardDatabase, document_id: str = values.DOCUMENT_ID):

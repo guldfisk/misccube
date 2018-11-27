@@ -21,13 +21,16 @@ from misccube.cubeload.load import CubeLoader
 from misccube.trapification import algorithm
 from misccube.trapification.algorithm import Distributor, DeltaDistributor, ConstraintSetBluePrint
 from misccube.trapification.fetch import ConstrainedNodeFetcher
-from misccube.trapification.persist import TrapCollectionPersistor
+from misccube.trapification.persist import TrapCollectionPersistor, TrapCollection
 
 
 GARBAGE_OUT_PATH = os.path.join(paths.OUT_DIR, 'garbage_distribution.pdf')
 GARBAGE_NEW_OUT_PATH = os.path.join(paths.OUT_DIR, 'garbage_distribution_new.pdf')
 GARBAGE_REMOVED_OUT_PATH = os.path.join(paths.OUT_DIR, 'garbage_distribution_removed.pdf')
+
 GARBAGE_LANDS_OUT_PATH = os.path.join(paths.OUT_DIR, 'garbage_lands_distribution.pdf')
+GARBAGE_LANDS_NEW_OUT_PATH = os.path.join(paths.OUT_DIR, 'garbage_lands_distribution_new.pdf')
+GARBAGE_LANDS_REMOVED_OUT_PATH = os.path.join(paths.OUT_DIR, 'garbage_lands_distribution_removed.pdf')
 
 
 def proxy_laps(
@@ -61,7 +64,7 @@ _GROUP_WEIGHTS = {
 	'BLACK': 1,
 	'RED': 1,
 	'GREEN': 1,
-	'drawgo': 2,
+	'drawgo': 3,
 	'mud': 3,
 	'post': 4,
 	'midrange': 2,
@@ -96,15 +99,20 @@ _GROUP_WEIGHTS = {
 	'greenhate': 4,
 	'antiwaste': 4,
 	'delirium': 3,
-	'sacvalue': 1,
+	'sacvalue': 2,
 	'lowtoughnesshate': 4,
-	'yardhate': 4,
 	'armageddon': 4,
 	'stax': 3,
 	'bloom': 3,
 	'weldingjar': 3,
 	'drawhate': 4,
 	'pluscard': 3,
+	'ramp': 3,
+	'devoteddruid': 4,
+	'fetchhate': 4,
+	'dragon': 2,
+	'company': 2,
+	'naturalorder': 3,
 	# lands
 	'fixing': 3,
 	'colorlessvalue': 1,
@@ -114,6 +122,7 @@ _GROUP_WEIGHTS = {
 	'sol': 3,
 	'manland': 4,
 	'storage': 3,
+	'croprotate': 3,
 }
 
 
@@ -174,22 +183,21 @@ def calculate(generations: int, lands: bool = False, max_delta: t.Optional[int] 
 			origin_trap_collection = cube_traps,
 			constraint_set_blue_print = blue_print,
 			max_trap_delta = max_delta,
-			mate_chance = .35,
-			mutate_chance = .25,
-			tournament_size = 4,
-			population_size = 450,
+			mate_chance = .4,
+			mutate_chance = .2,
+			tournament_size = 3,
+			population_size = 600,
 		)
 	else:
 		distributor = Distributor(
 			constrained_nodes = constrained_nodes,
-			trap_amount = 22 if lands else 44,
+			trap_amount = 22 if lands else 45,
 			constraint_set_blue_print = blue_print,
-			mate_chance = .35,
-			mutate_chance = .15,
-			tournament_size = 4,
+			mate_chance = .4,
+			mutate_chance = .2,
+			tournament_size = 3,
+			population_size = 600,
 		)
-
-	cube_fitness = distributor.evaluate_cube(cube_traps)
 
 	random_fitness = statistics.mean(
 		map(distributor.constraint_set.total_score, distributor.sample_random_population)
@@ -202,20 +210,39 @@ def calculate(generations: int, lands: bool = False, max_delta: t.Optional[int] 
 	print(f'Done in {time.time() - st} seconds')
 
 	print('Random fitness:', random_fitness)
-	print('Current cube fitness:', cube_fitness)
+
+	try:
+		print('Current cube fitness:', distributor.evaluate_cube(cube_traps))
+	except ValueError:
+		print('Nodes does not match current cube')
+		_, added, removed = distributor.trap_collection_to_trap_distribution(cube_traps, constrained_nodes)
+		print('added:', added)
+		print('removed:', removed)
 
 	print('Winner fitness:', winner.fitness.values[0])
 
 	distributor.show_plot()
 
 	winner_traps = winner.as_trap_collection
+	for trap in winner_traps:
+		trap._intention_type = (
+			IntentionType.LAND_GARBAGE
+			if lands else
+			IntentionType.GARBAGE
+		)
 
 	new_traps = winner_traps - cube_traps
 	removed_traps = cube_traps - winner_traps
 
 	print('New traps', len(new_traps))
 
-	trap_collection_persistor.persist(winner_traps)
+	trap_collection = TrapCollection(winner_traps)
+
+	trap_collection_persistor.persist(trap_collection)
+
+	print('\n------------------------------------------------\n')
+	print(trap_collection.minimal_string_list)
+	print('\n------------------------------------------------\n')
 
 	print('traps persisted')
 
@@ -228,13 +255,13 @@ def calculate(generations: int, lands: bool = False, max_delta: t.Optional[int] 
 	proxy_laps(
 		laps = new_traps,
 		image_loader = image_loader,
-		file_name = GARBAGE_LANDS_OUT_PATH if lands else GARBAGE_NEW_OUT_PATH,
+		file_name = GARBAGE_LANDS_NEW_OUT_PATH if lands else GARBAGE_NEW_OUT_PATH,
 	)
 
 	proxy_laps(
 		laps = removed_traps,
 		image_loader = image_loader,
-		file_name = GARBAGE_LANDS_OUT_PATH if lands else GARBAGE_REMOVED_OUT_PATH,
+		file_name = GARBAGE_LANDS_REMOVED_OUT_PATH if lands else GARBAGE_REMOVED_OUT_PATH,
 	)
 
 	print('proxying done')
@@ -243,17 +270,11 @@ def calculate(generations: int, lands: bool = False, max_delta: t.Optional[int] 
 def main():
 
 	calculate(
-		generations = 10,
-		lands = False,
+		generations = 700,
+		lands = True,
 		max_delta = 0,
 	)
-	# max delta = 18
-	# Random fitness: 1.7906935732098833e-23
-	# Current cube fitness: 1.8655540899455258e-12
-	# Winner fitness: 0.004525493230360965
 
-	# max delta = 0
-	# Winner fitness: 0.08098033726729653
 
 if __name__ == '__main__':
 	main()
