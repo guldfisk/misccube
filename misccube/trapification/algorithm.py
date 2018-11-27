@@ -6,10 +6,10 @@ import itertools
 import statistics
 import functools
 import operator
+import copy
 
 from abc import ABC, abstractmethod
 
-import numpy as np
 import matplotlib.pyplot as plt
 
 from deap import base, creator, tools, algorithms
@@ -19,6 +19,23 @@ from mtgorp.utilities.containers import HashableMultiset
 
 from magiccube.laps.traps.tree.printingtree import AllNode, PrintingNode
 from magiccube.laps.traps.trap import Trap
+
+
+class UnweightedFitness(base.Fitness):
+
+	weights = ()
+
+	def getValues(self):
+		return self.wvalues
+
+	def setValues(self, values):
+		self.wvalues = values
+
+	values = property(
+		getValues,
+		setValues,
+		base.Fitness.delValues,
+	)
 
 
 class ConstrainedNode(object):
@@ -45,15 +62,24 @@ class ConstrainedNode(object):
 		self._hash = hash(self.node)
 
 	def __repr__(self):
-		return f'CC({self.value})'
+		return f'CC({self.node})'
 
 	def __deepcopy__(self, memodict: t.Dict):
 		return self
 
 
-class TrapDistribution(object):
+class Individual(object):
 
-	fitness = None #type: base.Fitness
+	def __init__(self):
+		self.fitness = UnweightedFitness()
+
+	@property
+	@abstractmethod
+	def as_trap_collection(self) -> HashableMultiset[Trap]:
+		pass
+
+
+class TrapDistribution(Individual):
 
 	def __init__(
 		self,
@@ -62,6 +88,10 @@ class TrapDistribution(object):
 		traps: t.Optional[t.List[t.List[ConstrainedNode]]] = None,
 		random_initialization: bool = False
 	):
+		super().__init__()
+
+		self._trap_amount = trap_amount
+
 		if traps is None:
 			self.traps = [[] for _ in range(trap_amount)] #type: t.List[t.List[ConstrainedNode]]
 
@@ -75,6 +105,11 @@ class TrapDistribution(object):
 
 		else:
 			self.traps = traps #type: t.List[t.List[ConstrainedNode]]
+			self._trap_amount = len(self.traps)
+
+	@property
+	def trap_amount(self):
+		return self._trap_amount
 
 	@property
 	def as_trap_collection(self) -> HashableMultiset[Trap]:
@@ -88,9 +123,8 @@ class TrapDistribution(object):
 
 			for constrained_node in trap:
 				cubeable = constrained_node.node
-				if isinstance(cubeable, AllNode):
+				if isinstance(cubeable, AllNode) and len(cubeable.children) == 1:
 					cubeables.extend(cubeable.children)
-
 				else:
 					cubeables.append(cubeable)
 
@@ -102,8 +136,74 @@ class TrapDistribution(object):
 		return f'{self.__class__.__name__}({self.traps})'
 
 
-creator.create('Fitness', base.Fitness, weights=(1.,))
-creator.create('Individual', TrapDistribution, fitness=creator.Fitness)
+class DistributionDelta(Individual):
+
+	def __init__(
+		self,
+		origin: TrapDistribution,
+		added_nodes: t.Collection[ConstrainedNode],
+		removed_node_indexes: t.FrozenSet[int],
+		max_trap_difference: int,
+	):
+		super().__init__()
+
+		self.origin = origin
+		self._added_nodes = added_nodes
+		self._removed_node_indexes = removed_node_indexes
+		self._max_trap_difference = max_trap_difference
+
+		self.node_moves = {} #type: t.Dict[t.Tuple[int, int], int]
+		self.added_node_indexes = {} #type: t.Dict[ConstrainedNode, int]
+
+	@property
+	def max_trap_difference(self) -> int:
+		return self._max_trap_difference
+
+	@property
+	def removed_node_indexes(self) -> t.FrozenSet[int]:
+		return self._removed_node_indexes
+
+	@property
+	def modified_trap_indexes(self) -> t.FrozenSet[int]:
+		return frozenset(
+			itertools.chain(
+				self._removed_node_indexes,
+				(index for index, _ in self.node_moves),
+				(index for index in self.node_moves.values()),
+				(index for index in self.added_node_indexes.values()),
+			)
+		)
+
+	@property
+	def trap_distribution(self) -> TrapDistribution:
+		modified_distribution = copy.deepcopy(self.origin)
+
+		moves = [] #type: t.List[t.Tuple[ConstrainedNode, int]]
+
+		for index, trap in enumerate(modified_distribution.traps):
+			for from_indexes, to_index in sorted(
+				(item for item in self.node_moves.items() if item[0][0] == index),
+				key = lambda vs: vs[0][1],
+				reverse = True,
+			):
+				moves.append(
+					(
+						trap.pop(from_indexes[1]),
+						to_index,
+					)
+				)
+
+		for node, index in moves:
+			modified_distribution.traps[index].append(node)
+
+		for node, index in self.added_node_indexes:
+			modified_distribution.traps[index].append(node)
+
+		return modified_distribution
+
+	@property
+	def as_trap_collection(self) -> HashableMultiset[Trap]:
+		return self.trap_distribution.as_trap_collection
 
 
 def mutate_trap_distribution(distribution: TrapDistribution) -> t.Tuple[TrapDistribution]:
@@ -162,6 +262,151 @@ def mate_distributions(
 	return distribution_1, distribution_2
 
 
+def mutate_distribution_delta(delta: DistributionDelta) -> t.Tuple[DistributionDelta]:
+	for i in range(5):
+
+		if random.random() < .8:
+			modified_indexes = delta.modified_trap_indexes
+
+			from_trap_index = (
+				random.choice(list(modified_indexes))
+				if modified_indexes and len(modified_indexes) >= delta.max_trap_difference else
+				random.randint(0, delta.origin.trap_amount - 1)
+			)
+
+			node_index_options = frozenset(
+				range(
+					len(
+						delta.origin.traps[from_trap_index]
+					)
+				)
+			) - frozenset(
+				_node_index
+				for _trap_index, _node_index in
+				delta.node_moves
+				if _trap_index == from_trap_index
+			)
+
+			if not node_index_options:
+				continue
+
+			node_index = random.choice(list(node_index_options))
+
+			from_trap_index_set = frozenset((from_trap_index,))
+
+			possible_trap_indexes_to = (
+				modified_indexes - from_trap_index_set
+				if len(modified_indexes | from_trap_index_set) >= delta.max_trap_difference else
+				frozenset(range(delta.origin.trap_amount)) - from_trap_index_set
+			)
+
+			if not possible_trap_indexes_to:
+				continue
+
+			delta.node_moves[(from_trap_index, node_index)] = random.choice(list(possible_trap_indexes_to))
+
+		else:
+
+			if not delta.node_moves:
+				continue
+
+			del delta.node_moves[random.choice(list(delta.node_moves))]
+
+	if not delta.added_node_indexes:
+		return delta,
+
+	for i in range(2):
+
+		if random.random() < .2:
+			moved_node = random.choice(list(delta.added_node_indexes))
+			from_trap_index = delta.added_node_indexes[moved_node]
+
+			if not moved_node:
+				continue
+
+			del delta.added_node_indexes[moved_node]
+
+			modified_indexes = delta.modified_trap_indexes
+
+			from_trap_index_set = frozenset((from_trap_index,))
+
+			possible_trap_indexes_to = (
+				modified_indexes - from_trap_index_set
+				if len(modified_indexes) >= delta.max_trap_difference else
+				frozenset(range(delta.origin.trap_amount)) - from_trap_index_set
+			)
+
+			if not possible_trap_indexes_to:
+				continue
+
+			delta.added_node_indexes[moved_node] = random.choice(list(possible_trap_indexes_to))
+
+	return delta,
+
+
+def mate_distribution_deltas(
+	delta_1: DistributionDelta,
+	delta_2: DistributionDelta,
+) -> t.Tuple[DistributionDelta, DistributionDelta]:
+
+	moves = copy.copy(delta_1.node_moves)
+	moves.update(delta_2.node_moves)
+
+	adds = {
+		node:
+			frozenset(
+				(
+					delta_1.added_node_indexes[node],
+					delta_2.added_node_indexes[node],
+				)
+			)
+		for node in
+		delta_1.added_node_indexes
+	}
+
+	move_amounts = (len(delta_1.node_moves), len(delta_2.node_moves))
+	min_moves = min(move_amounts)
+	max_moves = max(move_amounts)
+
+	deltas = (delta_1, delta_2)
+
+	for delta in deltas:
+		modified = set()
+		modified.update(delta.removed_node_indexes)
+
+		node_moves = {}
+
+		for from_indexes, to_index in random.sample(moves.items(), random.randint(min_moves, max_moves)):
+			if len(modified) >= delta.max_trap_difference:
+				break
+
+			if len(modified | {from_indexes[0], to_index}) > delta.max_trap_difference:
+				continue
+
+			node_moves[from_indexes] = to_index
+			modified.add(from_indexes[0])
+			modified.add(to_index)
+
+		delta.node_moves = node_moves
+
+		added_nodes = {}
+
+		for added_node in delta.added_node_indexes:
+			possible_indexes = adds[added_node]
+
+			if len(modified) >= delta.max_trap_difference:
+				possible_indexes -= modified
+
+				if not possible_indexes:
+					possible_indexes = modified
+
+			index = random.choice(list(possible_indexes))
+			added_nodes[added_node] = index
+			modified.add(index)
+
+	return delta_1, delta_2
+
+
 def logistic(x: float, max_value: float, mid: float, slope: float) -> float:
 	return max_value / (1 + math.e ** (slope * (x - mid)))
 
@@ -187,16 +432,28 @@ class ConstraintSet(object):
 
 	def __init__(self, constraints: t.Tuple[t.Tuple[Constraint, float], ...]):
 		self._constraints = constraints
+		self._weights = tuple(weight for _, weight in self._constraints)
 
-	def score(self, distribution: TrapDistribution) -> float:
-		return functools.reduce(
-			operator.mul,
-			(
-				constraint.score(distribution) ** weight
-				for constraint, weight in
-				self._constraints
-			)
+	def score(self, distribution: TrapDistribution) -> t.Tuple[float, ...]:
+		unweighted_values = tuple(
+			constraint.score(distribution)
+			for constraint, _ in
+			self._constraints
 		)
+
+		return (
+			functools.reduce(
+				operator.mul,
+				(
+					value ** weight
+					for value, weight in
+					zip(unweighted_values, self._weights)
+				)
+			),
+		) + unweighted_values
+
+	def total_score(self, distribution: TrapDistribution) -> float:
+		return self.score(distribution)[0]
 
 	def __iter__(self) -> t.Iterable[Constraint]:
 		return (constraint for constraint, _ in self._constraints)
@@ -278,28 +535,6 @@ class ValueDistributionHomogeneityConstraint(Constraint):
 			x = self._value_distribution_homogeneity_factor(
 				distribution
 			),
-			max_value = 2,
-			mid = 0,
-			slope = 15,
-		)
-
-
-class DivergenceConstraint(Constraint):
-	description = 'Divergence'
-
-	def __init__(
-		self,
-		constrained_nodes: t.FrozenSet[ConstrainedNode],
-		trap_amount: int,
-		random_population: t.Collection[TrapDistribution],
-		origin: HashableMultiset[Trap],
-	):
-		super().__init__(constrained_nodes, trap_amount, random_population)
-		self._origin = origin
-
-	def score(self, distribution: TrapDistribution) -> float:
-		return logistic(
-			x = len(self._origin - distribution.as_trap_collection) / len(self._origin),
 			max_value = 2,
 			mid = 0,
 			slope = 15,
@@ -432,12 +667,10 @@ class Distributor(object):
 		constrained_nodes: t.Iterable[ConstrainedNode],
 		trap_amount: int,
 		constraint_set_blue_print: ConstraintSetBluePrint,
-		# group_weights: t.Dict[str, float] = None,
 		mate_chance: float = .5,
 		mutate_chance: float = .2,
 		tournament_size: int = 3,
 		population_size: int = 300,
-		seed_trap_collection: t.Optional[t.Collection[Trap]] = None,
 	):
 		self._constrained_nodes = frozenset(constrained_nodes)
 		self._trap_amount = trap_amount
@@ -447,22 +680,19 @@ class Distributor(object):
 		self._tournament_size = tournament_size
 		self._population_size = population_size
 
-		self._seed_trap_collection = seed_trap_collection
-
-
 		self._toolbox = base.Toolbox()
 
-		self._toolbox.register(
-			'individual',
-			creator.Individual,
-			constrained_nodes = self._constrained_nodes,
-			trap_amount = self._trap_amount,
-			random_initialization = True,
-		)
+		self._initialize_toolbox(self._toolbox)
+
 		self._toolbox.register('population', tools.initRepeat, list, self._toolbox.individual)
 
 		self._population = self._toolbox.population(n=self._population_size) #type: t.List[TrapDistribution]
-		self._sample_random_population = self._population
+
+		self._sample_random_population = [
+			TrapDistribution(self._constrained_nodes, self._trap_amount, random_initialization=True)
+			for _ in
+			range(self._population_size)
+		]
 
 		self._constraint_set = self._constraint_set_blue_print.realise(
 			self._constrained_nodes,
@@ -470,20 +700,6 @@ class Distributor(object):
 			self._sample_random_population,
 		)
 
-		if self._seed_trap_collection is not None:
-			self._population = [
-				self._toolbox.individual(
-					traps = self._trap_collection_to_trap_distribution(
-						self._seed_trap_collection
-					).traps
-				)
-				for _ in
-				range(self._population_size)
-			]
-
-		self._toolbox.register('evaluate', lambda d: (self._constraint_set.score(d),))
-		self._toolbox.register('mate', mate_distributions, distributor=self)
-		self._toolbox.register('mutate', mutate_trap_distribution)
 		self._toolbox.register('select', tools.selTournament, tournsize=self._tournament_size)
 
 		self._best = None
@@ -494,19 +710,32 @@ class Distributor(object):
 
 		class _MaxMap(object):
 
-			def __init__(self, _constraint: Constraint):
-				self._constraint = _constraint
+			def __init__(self, _index: int):
+				self._index = _index
 
 			def __call__(self, population: t.Collection[TrapDistribution]):
-				return max(map(self._constraint.score, population))
+				return max(individual.fitness.values[self._index] for individual in population)
 
-		for constraint in self._constraint_set:
+		for index, constraint in enumerate(self._constraint_set):
 			self._statistics.register(
 				constraint.description,
-				_MaxMap(constraint)
+				_MaxMap(index + 1),
 			)
 
 		self._logbook = None #type: tools.Logbook
+
+	def _initialize_toolbox(self, toolbox: base.Toolbox):
+		toolbox.register(
+			'individual',
+			TrapDistribution,
+			constrained_nodes = self._constrained_nodes,
+			trap_amount = self._trap_amount,
+			random_initialization = True,
+		)
+
+		toolbox.register('evaluate', lambda d: self._constraint_set.score(d))
+		toolbox.register('mate', mate_distributions, distributor=self)
+		toolbox.register('mutate', mutate_trap_distribution)
 
 	@property
 	def population(self) -> t.List[TrapDistribution]:
@@ -535,30 +764,55 @@ class Distributor(object):
 	def constraint_set(self) -> ConstraintSet:
 		return self._constraint_set
 
-	def _trap_collection_to_trap_distribution(self, traps: t.Collection[Trap]) -> TrapDistribution:
-		index_map = {}  # type: t.Dict[PrintingNode, int]
+	@classmethod
+	def trap_collection_to_trap_distribution(
+		cls,
+		traps: t.Collection[Trap],
+		constrained_nodes: t.Iterable[ConstrainedNode],
+	) -> t.Tuple[TrapDistribution, t.List[ConstrainedNode], t.List[t.Tuple[PrintingNode, int]]]:
+
+		constraint_map = {} #type: t.Dict[PrintingNode, t.List[ConstrainedNode]]
+
+		for constrained_node in constrained_nodes:
+			try:
+				constraint_map[constrained_node.node].append(constrained_node)
+			except KeyError:
+				constraint_map[constrained_node.node] = [constrained_node]
+
+		distribution = [[] for _ in range(len(traps))] #type: t.List[t.List[ConstrainedNode]]
+		removed = [] #type: t.List[t.Tuple[PrintingNode, int]]
 
 		for index, trap in enumerate(traps):
+
 			for child in trap.node.children:
-				index_map[child if isinstance(child, PrintingNode) else AllNode((child,))] = index
+				printing_node = child if isinstance(child, PrintingNode) else AllNode((child,))
 
-		traps = [[] for _ in range(len(traps))]
+				try:
+					distribution[index].append(constraint_map[printing_node].pop())
+				except (KeyError, IndexError):
+					removed.append((printing_node, index))
 
-		for node in self._constrained_nodes:
-			try:
-				traps[index_map[node.node]].append(node)
-			except KeyError as e:
-				if isinstance(node.node, AllNode):
-					traps[index_map[AllNode((node.node.children.__iter__().__next__(),))]].append(node)
-				else:
-					raise e
+		added = list(
+			itertools.chain(
+				*(
+					nodes
+					for nodes in
+					constraint_map.values()
+				)
+			)
+		)
 
-		return TrapDistribution(traps=traps)
+		return TrapDistribution(traps=distribution), added, removed
 
 	def evaluate_cube(self, traps: t.Collection[Trap]) -> float:
-		return self._constraint_set.score(
-			self._trap_collection_to_trap_distribution(traps)
+		distribution, added, removed = self.trap_collection_to_trap_distribution(
+			traps,
+			self._constrained_nodes,
 		)
+		if added or removed:
+			raise ValueError(f'Collection does not match distribution. Added: "{added}", removed: "{removed}".')
+
+		return self._constraint_set.score(distribution)[0]
 
 	def show_plot(self) -> 'Distributor':
 		generations = self._logbook.select("gen")
@@ -611,3 +865,57 @@ class Distributor(object):
 		self._best = None
 
 		return self
+
+
+class DeltaDistributor(Distributor):
+
+	def __init__(
+		self,
+		constrained_nodes: t.Iterable[ConstrainedNode],
+		origin_trap_collection: t.Collection[Trap],
+		constraint_set_blue_print: ConstraintSetBluePrint,
+		max_trap_delta: int,
+		mate_chance: float = .5,
+		mutate_chance: float = .2,
+		tournament_size: int = 3,
+		population_size: int = 300,
+	):
+		self._origin_trap_collection = origin_trap_collection
+		self._max_trap_delta = max_trap_delta
+
+		distribution, added, removed = self.trap_collection_to_trap_distribution(
+			self._origin_trap_collection,
+			constrained_nodes,
+		)
+
+		self._origin_trap_distribution = distribution
+		self._added = added
+		self._removed_trap_indexes = frozenset(
+			index
+			for node, index in
+			removed
+		)
+
+		super().__init__(
+			constrained_nodes,
+			len(origin_trap_collection),
+			constraint_set_blue_print,
+			mate_chance,
+			mutate_chance,
+			tournament_size,
+			population_size,
+		)
+
+	def _initialize_toolbox(self, toolbox: base.Toolbox):
+		toolbox.register(
+			'individual',
+			DistributionDelta,
+			origin = self._origin_trap_distribution,
+			added_nodes = self._added,
+			removed_node_indexes = self._removed_trap_indexes,
+			max_trap_difference = self._max_trap_delta,
+		)
+
+		toolbox.register('evaluate', lambda d: self._constraint_set.score(d.trap_distribution))
+		toolbox.register('mate', mate_distribution_deltas)
+		toolbox.register('mutate', mutate_distribution_delta)

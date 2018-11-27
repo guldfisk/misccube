@@ -1,30 +1,27 @@
-import typing as t
-
-import time
-import random
 import os
+import random
 import statistics
+import time
+import typing as t
 
 from promise import Promise
 
 from proxypdf.write import save_proxy_pdf
 
 from mtgorp.db.load import Loader
-from mtgorp.db.database import CardDatabase
 from mtgorp.utilities.containers import HashableMultiset
 
 from mtgimg.load import Loader as ImageLoader
 
 from magiccube.laps.lap import Lap
 from magiccube.laps.traps.trap import IntentionType
-from magiccube.laps.traps.tree.printingtree import AllNode, PrintingNode
-from magiccube.collections.cube import Cube
 
-from misccube.cubeload.load import CubeLoader
-from misccube.trapification.fetch import ConstrainedNodeFetcher, ConstrainedCubeablesFetchException
-from misccube.trapification.algorithm import ConstrainedNode, Distributor, TrapDistribution, ConstraintSetBluePrint
-from misccube.trapification import algorithm
 from misccube import paths
+from misccube.cubeload.load import CubeLoader
+from misccube.trapification import algorithm
+from misccube.trapification.algorithm import Distributor, DeltaDistributor, ConstraintSetBluePrint
+from misccube.trapification.fetch import ConstrainedNodeFetcher
+from misccube.trapification.persist import TrapCollectionPersistor
 
 
 GARBAGE_OUT_PATH = os.path.join(paths.OUT_DIR, 'garbage_distribution.pdf')
@@ -126,13 +123,15 @@ GROUP_WEIGHT_EXPONENT = 1.5
 GROUP_WEIGHTS = {key: value ** GROUP_WEIGHT_EXPONENT for key, value in _GROUP_WEIGHTS.items()}
 
 
-def calculate(lands: bool = False):
+def calculate(generations: int, lands: bool = False, max_delta: t.Optional[int] = None):
 	random.seed()
 
 	db = Loader.load()
 	image_loader = ImageLoader()
 	fetcher = ConstrainedNodeFetcher(db)
 	cube_loader = CubeLoader(db)
+
+	trap_collection_persistor = TrapCollectionPersistor(db)
 
 	constrained_nodes = fetcher.fetch_garbage_lands() if lands else fetcher.fetch_garbage()
 
@@ -167,32 +166,38 @@ def calculate(lands: bool = False):
 			1,
 			{},
 		),
-		# (
-		# 	algorithm.DivergenceConstraint,
-		# 	4,
-		# 	{'origin': cube_traps},
-		# )
 	)
 
-	distributor = Distributor(
-		constrained_nodes = constrained_nodes,
-		trap_amount = 22 if lands else 44,
-		constraint_set_blue_print = blue_print,
-		mate_chance = .35,
-		mutate_chance = .15,
-		tournament_size = 4,
-		# seed_trap_collection = cube_traps,
-	)
+	if max_delta is not None and max_delta > 0:
+		distributor = DeltaDistributor(
+			constrained_nodes = constrained_nodes,
+			origin_trap_collection = cube_traps,
+			constraint_set_blue_print = blue_print,
+			max_trap_delta = max_delta,
+			mate_chance = .35,
+			mutate_chance = .25,
+			tournament_size = 4,
+			population_size = 450,
+		)
+	else:
+		distributor = Distributor(
+			constrained_nodes = constrained_nodes,
+			trap_amount = 22 if lands else 44,
+			constraint_set_blue_print = blue_print,
+			mate_chance = .35,
+			mutate_chance = .15,
+			tournament_size = 4,
+		)
 
 	cube_fitness = distributor.evaluate_cube(cube_traps)
 
 	random_fitness = statistics.mean(
-		map(distributor.constraint_set.score, distributor.population)
+		map(distributor.constraint_set.total_score, distributor.sample_random_population)
 	)
 
 	st = time.time()
 
-	winner = distributor.evaluate(100).best
+	winner = distributor.evaluate(generations).best
 
 	print(f'Done in {time.time() - st} seconds')
 
@@ -209,6 +214,10 @@ def calculate(lands: bool = False):
 	removed_traps = cube_traps - winner_traps
 
 	print('New traps', len(new_traps))
+
+	trap_collection_persistor.persist(winner_traps)
+
+	print('traps persisted')
 
 	proxy_laps(
 		laps = winner_traps,
@@ -232,9 +241,19 @@ def calculate(lands: bool = False):
 
 
 def main():
-	lands = False
-	calculate(lands)
 
+	calculate(
+		generations = 10,
+		lands = False,
+		max_delta = 0,
+	)
+	# max delta = 18
+	# Random fitness: 1.7906935732098833e-23
+	# Current cube fitness: 1.8655540899455258e-12
+	# Winner fitness: 0.004525493230360965
+
+	# max delta = 0
+	# Winner fitness: 0.08098033726729653
 
 if __name__ == '__main__':
 	main()

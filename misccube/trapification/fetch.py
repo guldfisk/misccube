@@ -146,14 +146,14 @@ class ConstrainedNodeFetcher(object):
 				exceptions.append(e)
 				continue
 
-			node = ConstrainedNode(
-				node = node,
-				value = value,
-				groups = groups,
-			)
-
 			for _ in range(amount):
-				constrained_cubeables.append(node)
+				constrained_cubeables.append(
+					ConstrainedNode(
+						node = node,
+						value = value,
+						groups = groups,
+					)
+				)
 
 		if exceptions:
 			raise ConstrainedCubeablesFetchException(exceptions)
