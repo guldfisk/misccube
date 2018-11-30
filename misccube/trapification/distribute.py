@@ -270,9 +270,9 @@ def calculate(generations: int, lands: bool = False, max_delta: t.Optional[int] 
 def main():
 
 	calculate(
-		generations = 700,
-		lands = True,
-		max_delta = 0,
+		generations = 500,
+		lands = False,
+		max_delta = 5,
 	)
 
 

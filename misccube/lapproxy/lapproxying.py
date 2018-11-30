@@ -21,7 +21,7 @@ from misccube.cubeload.load import CubeLoader
 class LapProxyer(object):
 	OUT_DIR = 'out'
 
-	def __init__(self, cube_loader: CubeLoader, margin_size: float = .1, card_margin_size: float = .0):
+	def __init__(self, cube_loader: CubeLoader, margin_size: float = .1, card_margin_size: float = .05):
 		self._cube_loader = cube_loader
 		self.margin_size = margin_size
 		self.card_margin_size = card_margin_size
@@ -91,7 +91,11 @@ def run():
 
 	cube_loader.check_and_update()
 
-	lapper = LapProxyer(cube_loader, margin_size = .8)
+	lapper = LapProxyer(
+		cube_loader,
+		margin_size = .25,
+		card_margin_size = .0,
+	)
 
 	lapper.pdf_all_images()
 

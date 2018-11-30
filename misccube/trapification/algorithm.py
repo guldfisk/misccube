@@ -155,6 +155,13 @@ class DistributionDelta(Individual):
 		self.node_moves = {} #type: t.Dict[t.Tuple[int, int], int]
 		self.added_node_indexes = {} #type: t.Dict[ConstrainedNode, int]
 
+		for node in self._added_nodes:
+			modified = self.modified_trap_indexes
+			if len(modified) > self._max_trap_difference:
+				self.added_node_indexes[node] = random.choice(list(modified))
+			else:
+				self.added_node_indexes[node] = random.randint(0, self.origin.trap_amount - 1)
+
 	@property
 	def max_trap_difference(self) -> int:
 		return self._max_trap_difference
@@ -196,7 +203,7 @@ class DistributionDelta(Individual):
 		for node, index in moves:
 			modified_distribution.traps[index].append(node)
 
-		for node, index in self.added_node_indexes:
+		for node, index in self.added_node_indexes.items():
 			modified_distribution.traps[index].append(node)
 
 		return modified_distribution
