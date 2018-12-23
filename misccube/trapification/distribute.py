@@ -113,6 +113,7 @@ _GROUP_WEIGHTS = {
 	'dragon': 2,
 	'company': 2,
 	'naturalorder': 3,
+	'flash': 3,
 	# lands
 	'fixing': 3,
 	'colorlessvalue': 1,
@@ -132,7 +133,7 @@ GROUP_WEIGHT_EXPONENT = 1.5
 GROUP_WEIGHTS = {key: value ** GROUP_WEIGHT_EXPONENT for key, value in _GROUP_WEIGHTS.items()}
 
 
-def calculate(generations: int, lands: bool = False, max_delta: t.Optional[int] = None):
+def calculate(generations: int, trap_amount: int, lands: bool = False, max_delta: t.Optional[int] = None):
 	random.seed()
 
 	db = Loader.load()
@@ -180,6 +181,7 @@ def calculate(generations: int, lands: bool = False, max_delta: t.Optional[int] 
 	if max_delta is not None and max_delta > 0:
 		distributor = DeltaDistributor(
 			constrained_nodes = constrained_nodes,
+			trap_amount = trap_amount,
 			origin_trap_collection = cube_traps,
 			constraint_set_blue_print = blue_print,
 			max_trap_delta = max_delta,
@@ -191,7 +193,7 @@ def calculate(generations: int, lands: bool = False, max_delta: t.Optional[int] 
 	else:
 		distributor = Distributor(
 			constrained_nodes = constrained_nodes,
-			trap_amount = 22 if lands else 45,
+			trap_amount = trap_amount,
 			constraint_set_blue_print = blue_print,
 			mate_chance = .4,
 			mutate_chance = .2,
@@ -268,12 +270,22 @@ def calculate(generations: int, lands: bool = False, max_delta: t.Optional[int] 
 
 
 def main():
+	land_garbage_trap_amount = 22
+	garbage_trap_amount = 45
+
+	lands = False
 
 	calculate(
-		generations = 500,
-		lands = False,
-		max_delta = 5,
+		generations = 1000,
+		trap_amount = land_garbage_trap_amount if lands else garbage_trap_amount,
+		lands = lands,
+		max_delta = 0,
 	)
+
+	# Done in 446.507931470871 seconds
+	# Random fitness: 4.333538399779275e-23
+	# Current cube fitness: 0.0013272797010674638
+	# Winner fitness: 0.028478097190894232
 
 
 if __name__ == '__main__':

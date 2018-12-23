@@ -84,6 +84,7 @@ class ConstrainedNodeFetcher(object):
 		'dragon',
 		'company',
 		'naturalorder',
+		'flash',
 		# lands
 		'fixing',
 		'colorlessvalue',

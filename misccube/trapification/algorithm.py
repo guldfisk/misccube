@@ -144,10 +144,11 @@ class DistributionDelta(Individual):
 		added_nodes: t.Collection[ConstrainedNode],
 		removed_node_indexes: t.FrozenSet[int],
 		max_trap_difference: int,
+		trap_amount_delta: int = 0,
 	):
 		super().__init__()
 
-		self.origin = origin
+		self._origin = origin
 		self._added_nodes = added_nodes
 		self._removed_node_indexes = removed_node_indexes
 		self._max_trap_difference = max_trap_difference
@@ -155,12 +156,51 @@ class DistributionDelta(Individual):
 		self.node_moves = {} #type: t.Dict[t.Tuple[int, int], int]
 		self.added_node_indexes = {} #type: t.Dict[ConstrainedNode, int]
 
+		self._trap_amount_delta = trap_amount_delta
+
+		self._all_index_set = frozenset(range(self.trap_amount))
+
+		self.removed_trap_redistributions = {} #type: t.Dict[int, t.List[int]]
+
+		for _ in range(self.removed_trap_amount):
+			removed_index = self.get_available_trap_index()
+			self.removed_trap_redistributions[removed_index] = []
+
+		for removed_index in self.removed_trap_redistributions:
+			for _ in self._origin.traps[removed_index]:
+				self.removed_trap_redistributions[removed_index].append(
+					self.get_available_trap_index()
+				)
+
+		for index in itertools.chain(*self.removed_trap_redistributions.values()):
+			if index in self.removed_trap_redistributions:
+				raise Exception('dude what')
+
 		for node in self._added_nodes:
-			modified = self.modified_trap_indexes
-			if len(modified) > self._max_trap_difference:
-				self.added_node_indexes[node] = random.choice(list(modified))
-			else:
-				self.added_node_indexes[node] = random.randint(0, self.origin.trap_amount - 1)
+			self.added_node_indexes[node] = random.sample(
+				(
+					self.valid_trap_indexes
+					if len(self.modified_trap_indexes) < self._max_trap_difference else
+					self.modified_trap_indexes - self.removed_trap_redistributions.keys()
+				),
+				1
+			)[0]
+
+	@property
+	def origin(self) -> TrapDistribution:
+		return self._origin
+
+	@property
+	def trap_amount(self) -> int:
+		return self._origin.trap_amount + self._trap_amount_delta
+
+	@property
+	def added_trap_amount(self) -> int:
+		return max(self._trap_amount_delta, 0)
+
+	@property
+	def removed_trap_amount(self) -> int:
+		return max(-self._trap_amount_delta, 0)
 
 	@property
 	def max_trap_difference(self) -> int:
@@ -171,19 +211,77 @@ class DistributionDelta(Individual):
 		return self._removed_node_indexes
 
 	@property
+	def valid_trap_indexes(self) -> t.FrozenSet[int]:
+		return self._all_index_set - self.removed_trap_redistributions.keys()
+
+	def get_available_trap_index(self) -> int:
+		modifications = self.modified_trap_indexes
+		return random.sample(
+			(
+				self.valid_trap_indexes
+				if len(modifications) < self.max_trap_difference else
+				modifications - self.removed_trap_redistributions.keys()
+			),
+			1
+		)[0]
+
+	def evacuate_removed_trap(self, index: int) -> None:
+		for from_indexes, to_index in self.node_moves.items():
+			if to_index == index:
+				self.node_moves[from_indexes] = self.get_available_trap_index()
+
+		changes = [] #type: t.List[t.Tuple[int, int]
+
+		for indexes in self.node_moves:
+			if indexes[0] == index:
+				changes.append(indexes)
+
+		for indexes in changes:
+			del self.node_moves[indexes]
+
+		for node, added_node_index in self.added_node_indexes.items():
+			if index == added_node_index:
+				self.added_node_indexes[node] = self.get_available_trap_index()
+
+		for removed_index, target_indexes in self.removed_trap_redistributions.items():
+			if not removed_index == index:
+				continue
+
+			for target_index_index, target_index in enumerate(target_indexes):
+				if target_index in self.removed_trap_redistributions:
+					target_indexes[target_index_index] = self.get_available_trap_index()
+
+		# for from_index, target_indexes in self.removed_trap_redistributions.items():
+		#
+		# 	for target_index in target_indexes:
+		# 		if target_index in self.removed_trap_redistributions:
+		# 			print(index, from_index, target_indexes, target_index, self.removed_trap_redistributions)
+		# 			raise Exception('dude what in evac')
+
+		# for target_index in itertools.chain(*self.removed_trap_redistributions.values()):
+		# 	if target_index in self.removed_trap_redistributions:
+		# 		print(target_index, index)
+		# 		raise Exception('dude what in evac')
+
+	@property
 	def modified_trap_indexes(self) -> t.FrozenSet[int]:
 		return frozenset(
 			itertools.chain(
 				self._removed_node_indexes,
 				(index for index, _ in self.node_moves),
-				(index for index in self.node_moves.values()),
-				(index for index in self.added_node_indexes.values()),
+				self.node_moves.values(),
+				self.added_node_indexes.values(),
+				range(self.origin.trap_amount, self.origin.trap_amount + self._trap_amount_delta),
+				*self.removed_trap_redistributions.values(),
 			)
-		)
+		) - self.removed_trap_redistributions.keys()
 
 	@property
 	def trap_distribution(self) -> TrapDistribution:
-		modified_distribution = copy.deepcopy(self.origin)
+		modified_distribution = copy.deepcopy(self._origin)
+
+		for _ in range(self.added_trap_amount):
+			modified_distribution.traps.append([])
 
 		moves = [] #type: t.List[t.Tuple[ConstrainedNode, int]]
 
@@ -205,6 +303,24 @@ class DistributionDelta(Individual):
 
 		for node, index in self.added_node_indexes.items():
 			modified_distribution.traps[index].append(node)
+
+		for from_index, target_indexes in self.removed_trap_redistributions.items():
+			for target_index in target_indexes:
+				modified_distribution.traps[target_index].append(
+					modified_distribution.traps[from_index].pop(0)
+				)
+
+		for index in sorted(self.removed_trap_redistributions, reverse=True):
+			if modified_distribution.traps[index]:
+				print(self.node_moves)
+				print(self.removed_trap_redistributions)
+				print(self.added_node_indexes)
+				print(len(self.origin.traps[index]))
+				print(modified_distribution.traps[index])
+				print(index)
+				raise RuntimeError('Removed trap not empty')
+
+			del modified_distribution.traps[index]
 
 		return modified_distribution
 
@@ -275,18 +391,22 @@ def mutate_distribution_delta(delta: DistributionDelta) -> t.Tuple[DistributionD
 		if random.random() < .8:
 			modified_indexes = delta.modified_trap_indexes
 
-			from_trap_index = (
-				random.choice(list(modified_indexes))
-				if modified_indexes and len(modified_indexes) >= delta.max_trap_difference else
-				random.randint(0, delta.origin.trap_amount - 1)
-			)
+			from_trap_index = random.sample(
+				(
+					delta.valid_trap_indexes
+					if len(modified_indexes) < delta.max_trap_difference else
+					modified_indexes - delta.removed_trap_redistributions.keys()
+				),
+				1
+			)[0]
 
 			node_index_options = frozenset(
 				range(
 					len(
 						delta.origin.traps[from_trap_index]
 					)
-				)
+				) if from_trap_index < len(delta.origin.traps) else
+				()
 			) - frozenset(
 				_node_index
 				for _trap_index, _node_index in
@@ -297,20 +417,20 @@ def mutate_distribution_delta(delta: DistributionDelta) -> t.Tuple[DistributionD
 			if not node_index_options:
 				continue
 
-			node_index = random.choice(list(node_index_options))
+			node_index = random.sample(node_index_options, 1)[0]
 
 			from_trap_index_set = frozenset((from_trap_index,))
 
 			possible_trap_indexes_to = (
-				modified_indexes - from_trap_index_set
+				modified_indexes - delta.removed_trap_redistributions.keys() - from_trap_index_set
 				if len(modified_indexes | from_trap_index_set) >= delta.max_trap_difference else
-				frozenset(range(delta.origin.trap_amount)) - from_trap_index_set
+				delta.valid_trap_indexes - from_trap_index_set
 			)
 
 			if not possible_trap_indexes_to:
 				continue
 
-			delta.node_moves[(from_trap_index, node_index)] = random.choice(list(possible_trap_indexes_to))
+			delta.node_moves[(from_trap_index, node_index)] = random.sample(possible_trap_indexes_to, 1)[0]
 
 		else:
 
@@ -319,34 +439,54 @@ def mutate_distribution_delta(delta: DistributionDelta) -> t.Tuple[DistributionD
 
 			del delta.node_moves[random.choice(list(delta.node_moves))]
 
-	if not delta.added_node_indexes:
-		return delta,
+	if delta.added_node_indexes:
+		for i in range(2):
 
-	for i in range(2):
+			if random.random() < .2:
+				moved_node = random.choice(list(delta.added_node_indexes))
+				from_trap_index = delta.added_node_indexes[moved_node]
 
-		if random.random() < .2:
-			moved_node = random.choice(list(delta.added_node_indexes))
-			from_trap_index = delta.added_node_indexes[moved_node]
+				del delta.added_node_indexes[moved_node]
 
-			if not moved_node:
-				continue
+				modified_indexes = delta.modified_trap_indexes
 
-			del delta.added_node_indexes[moved_node]
+				from_trap_index_set = frozenset((from_trap_index,))
 
-			modified_indexes = delta.modified_trap_indexes
+				possible_trap_indexes_to = (
+					modified_indexes - delta.removed_trap_redistributions.keys() - from_trap_index_set
+					if len(modified_indexes) >= delta.max_trap_difference else
+					delta.valid_trap_indexes - from_trap_index_set
+				)
 
-			from_trap_index_set = frozenset((from_trap_index,))
+				if not possible_trap_indexes_to:
+					continue
 
-			possible_trap_indexes_to = (
-				modified_indexes - from_trap_index_set
-				if len(modified_indexes) >= delta.max_trap_difference else
-				frozenset(range(delta.origin.trap_amount)) - from_trap_index_set
-			)
+				delta.added_node_indexes[moved_node] = random.sample(possible_trap_indexes_to, 1)[0]
 
-			if not possible_trap_indexes_to:
-				continue
+	if delta.removed_trap_redistributions:
+		for _ in range(2):
+			if random.random() < .05:
+				unremoved_index = random.choice(list(delta.removed_trap_redistributions))
 
-			delta.added_node_indexes[moved_node] = random.choice(list(possible_trap_indexes_to))
+				new_removed_index = random.sample(delta.valid_trap_indexes, 1)[0]
+
+				del delta.removed_trap_redistributions[unremoved_index]
+				delta.removed_trap_redistributions[new_removed_index] = []
+
+				delta.removed_trap_redistributions[new_removed_index] = [
+					delta.get_available_trap_index()
+					for _ in delta.origin.traps[new_removed_index]
+				]
+
+				for index in delta.removed_trap_redistributions:
+					delta.evacuate_removed_trap(index)
+
+		for _ in range(5):
+			if random.random() < .1:
+				trap = delta.removed_trap_redistributions[
+					random.choice(list(delta.removed_trap_redistributions))
+				]
+				trap[random.randint(0, len(trap) - 1)] = delta.get_available_trap_index()
 
 	return delta,
 
@@ -375,11 +515,51 @@ def mate_distribution_deltas(
 	min_moves = min(move_amounts)
 	max_moves = max(move_amounts)
 
+	removed_distributions = {} #type: t.Dict[int, t.List[t.List[int]]]
+
 	deltas = (delta_1, delta_2)
 
 	for delta in deltas:
+		for index, indexes in delta.removed_trap_redistributions.items():
+			try:
+				removed_distributions[index].append(indexes)
+			except KeyError:
+				removed_distributions[index] = [indexes]
+
+
+	for delta in deltas:
+
 		modified = set()
 		modified.update(delta.removed_node_indexes)
+
+		delta.removed_trap_redistributions = {}
+		for index, distribution_options in random.sample(removed_distributions.items(), delta.removed_trap_amount):
+			delta.removed_trap_redistributions[index] = []
+			modified.add(index)
+
+			for options in zip(*distribution_options):
+				if len(modified) < delta.max_trap_difference:
+					target_index = random.choice(options)
+					delta.removed_trap_redistributions[index].append(target_index)
+					modified.add(target_index)
+
+				else:
+					moved = False
+					options = list(options)
+					random.shuffle(options)
+					for target_index in options:
+						if target_index in modified:
+							delta.removed_trap_redistributions[index].append(target_index)
+							moved = True
+							break
+
+					if not moved:
+						delta.removed_trap_redistributions[index].append(
+							random.sample(
+								delta.valid_trap_indexes & modified,
+								1
+							)[0]
+						)
 
 		node_moves = {}
 
@@ -407,9 +587,12 @@ def mate_distribution_deltas(
 				if not possible_indexes:
 					possible_indexes = modified
 
-			index = random.choice(list(possible_indexes))
+			index = random.sample(possible_indexes, 1)[0]
 			added_nodes[added_node] = index
 			modified.add(index)
+
+		for index in delta.removed_trap_redistributions:
+			delta.evacuate_removed_trap(index)
 
 	return delta_1, delta_2
 
@@ -597,7 +780,7 @@ class GroupExclusivityConstraint(Constraint):
 
 			collision_factor += sum(
 				(
-					sum(node.value for node in nodes)
+					sum(node.value for node in nodes) + 30
 					* max(self._get_group_weight(group) for group in groups)
 				) ** 1.5
 				for nodes, groups in
@@ -890,6 +1073,7 @@ class DeltaDistributor(Distributor):
 		origin_trap_collection: t.Collection[Trap],
 		constraint_set_blue_print: ConstraintSetBluePrint,
 		max_trap_delta: int,
+		trap_amount: t.Optional[int] = None,
 		mate_chance: float = .5,
 		mutate_chance: float = .2,
 		tournament_size: int = 3,
@@ -913,7 +1097,11 @@ class DeltaDistributor(Distributor):
 
 		super().__init__(
 			constrained_nodes,
-			len(origin_trap_collection),
+			(
+				len(origin_trap_collection)
+				if trap_amount is None else
+				trap_amount
+			),
 			constraint_set_blue_print,
 			mate_chance,
 			mutate_chance,
@@ -929,6 +1117,7 @@ class DeltaDistributor(Distributor):
 			added_nodes = self._added,
 			removed_node_indexes = self._removed_trap_indexes,
 			max_trap_difference = self._max_trap_delta,
+			trap_amount_delta = self.trap_amount - self._origin_trap_distribution.trap_amount,
 		)
 
 		toolbox.register('evaluate', lambda d: self._constraint_set.score(d.trap_distribution))
