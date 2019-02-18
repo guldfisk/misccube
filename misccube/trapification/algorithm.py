@@ -251,18 +251,6 @@ class DistributionDelta(Individual):
 				if target_index in self.removed_trap_redistributions:
 					target_indexes[target_index_index] = self.get_available_trap_index()
 
-		# for from_index, target_indexes in self.removed_trap_redistributions.items():
-		#
-		# 	for target_index in target_indexes:
-		# 		if target_index in self.removed_trap_redistributions:
-		# 			print(index, from_index, target_indexes, target_index, self.removed_trap_redistributions)
-		# 			raise Exception('dude what in evac')
-
-		# for target_index in itertools.chain(*self.removed_trap_redistributions.values()):
-		# 	if target_index in self.removed_trap_redistributions:
-		# 		print(target_index, index)
-		# 		raise Exception('dude what in evac')
-
 	@property
 	def modified_trap_indexes(self) -> t.FrozenSet[int]:
 		return frozenset(
@@ -311,15 +299,6 @@ class DistributionDelta(Individual):
 				)
 
 		for index in sorted(self.removed_trap_redistributions, reverse=True):
-			if modified_distribution.traps[index]:
-				print(self.node_moves)
-				print(self.removed_trap_redistributions)
-				print(self.added_node_indexes)
-				print(len(self.origin.traps[index]))
-				print(modified_distribution.traps[index])
-				print(index)
-				raise RuntimeError('Removed trap not empty')
-
 			del modified_distribution.traps[index]
 
 		return modified_distribution

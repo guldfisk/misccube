@@ -136,6 +136,7 @@ class CubeFetcher(object):
 			arguments: t.Iterable[str],
 			parser: t.Callable[[str, str], T],
 		) -> t.Iterable[T]:
+
 			for _cell, arg in itertools.zip_longest(cells, arguments, fillvalue=''):
 				if _cell:
 					try:

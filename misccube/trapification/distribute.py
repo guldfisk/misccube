@@ -114,6 +114,8 @@ _GROUP_WEIGHTS = {
 	'company': 2,
 	'naturalorder': 3,
 	'flash': 3,
+	'wincon': 3,
+	'vial': 4,
 	# lands
 	'fixing': 3,
 	'colorlessvalue': 1,
@@ -185,8 +187,8 @@ def calculate(generations: int, trap_amount: int, lands: bool = False, max_delta
 			origin_trap_collection = cube_traps,
 			constraint_set_blue_print = blue_print,
 			max_trap_delta = max_delta,
-			mate_chance = .4,
-			mutate_chance = .2,
+			mate_chance = .45,
+			mutate_chance = .35,
 			tournament_size = 3,
 			population_size = 600,
 		)
@@ -195,8 +197,8 @@ def calculate(generations: int, trap_amount: int, lands: bool = False, max_delta
 			constrained_nodes = constrained_nodes,
 			trap_amount = trap_amount,
 			constraint_set_blue_print = blue_print,
-			mate_chance = .4,
-			mutate_chance = .2,
+			mate_chance = .45,
+			mutate_chance = .35,
 			tournament_size = 3,
 			population_size = 600,
 		)
@@ -271,21 +273,27 @@ def calculate(generations: int, trap_amount: int, lands: bool = False, max_delta
 
 def main():
 	land_garbage_trap_amount = 22
-	garbage_trap_amount = 45
+	garbage_trap_amount = 46
 
 	lands = False
 
 	calculate(
-		generations = 1000,
+		generations = 1500,
 		trap_amount = land_garbage_trap_amount if lands else garbage_trap_amount,
 		lands = lands,
-		max_delta = 0,
+		max_delta = 23,
 	)
 
 	# Done in 446.507931470871 seconds
 	# Random fitness: 4.333538399779275e-23
 	# Current cube fitness: 0.0013272797010674638
 	# Winner fitness: 0.028478097190894232
+
+	# Done in 319.77151560783386 seconds
+	# Random fitness: 3.795032910321166e-24
+	# Current cube fitness: 0.001397470519954112
+	# Winner fitness: 0.0628689312432253
+	# New traps 45
 
 
 if __name__ == '__main__':
