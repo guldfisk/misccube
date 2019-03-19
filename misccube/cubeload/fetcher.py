@@ -80,7 +80,7 @@ class CubeFetcher(object):
 		try:
 			return Trap(
 				node = self._printing_tree_parser.parse(cell),
-				intention_type = IntentionType(arg) if arg else None,
+				intention_type = IntentionType(arg.split('-')[0]) if arg else None,
 			)
 		except (PrintingTreeParserException, AttributeError) as e:
 			raise CubeParseException(e)

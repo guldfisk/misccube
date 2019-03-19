@@ -3,6 +3,7 @@ import random
 import statistics
 import time
 import typing as t
+from enum import Enum
 
 from promise import Promise
 
@@ -31,6 +32,16 @@ GARBAGE_REMOVED_OUT_PATH = os.path.join(paths.OUT_DIR, 'garbage_distribution_rem
 GARBAGE_LANDS_OUT_PATH = os.path.join(paths.OUT_DIR, 'garbage_lands_distribution.pdf')
 GARBAGE_LANDS_NEW_OUT_PATH = os.path.join(paths.OUT_DIR, 'garbage_lands_distribution_new.pdf')
 GARBAGE_LANDS_REMOVED_OUT_PATH = os.path.join(paths.OUT_DIR, 'garbage_lands_distribution_removed.pdf')
+
+BOTH_OUT_PATH = os.path.join(paths.OUT_DIR, 'full_garbage_distribution.pdf')
+BOTH_NEW_OUT_PATH = os.path.join(paths.OUT_DIR, 'full_garbage_distribution_new.pdf')
+BOTH_REMOVED_OUT_PATH = os.path.join(paths.OUT_DIR, 'full_garbage_distribution_removed.pdf')
+
+
+class IntentionTypeTarget(Enum):
+	GARBAGE = 'garbage'
+	LANDS_GARBAGE = 'lands_garbage'
+	BOTH = 'both'
 
 
 def proxy_laps(
@@ -135,7 +146,12 @@ GROUP_WEIGHT_EXPONENT = 1.5
 GROUP_WEIGHTS = {key: value ** GROUP_WEIGHT_EXPONENT for key, value in _GROUP_WEIGHTS.items()}
 
 
-def calculate(generations: int, trap_amount: int, lands: bool = False, max_delta: t.Optional[int] = None):
+def calculate(
+	generations: int,
+	trap_amount: int,
+	target: IntentionTypeTarget = IntentionTypeTarget.GARBAGE,
+	max_delta: t.Optional[int] = None,
+):
 	random.seed()
 
 	db = Loader.load()
@@ -145,20 +161,30 @@ def calculate(generations: int, trap_amount: int, lands: bool = False, max_delta
 
 	trap_collection_persistor = TrapCollectionPersistor(db)
 
-	constrained_nodes = fetcher.fetch_garbage_lands() if lands else fetcher.fetch_garbage()
+	intention_switch = {
+		IntentionTypeTarget.GARBAGE: fetcher.fetch_garbage,
+		IntentionTypeTarget.LANDS_GARBAGE: fetcher.fetch_garbage_lands,
+		IntentionTypeTarget.BOTH: fetcher.fetch_all,
+	}
+
+	constrained_nodes = intention_switch[target]()
 
 	print(f'loaded {len(constrained_nodes)} nodes')
 
 	cube = cube_loader.load()
 
 	cube_traps = HashableMultiset(
-		trap
-		for trap in
 		cube.traps
-		if trap.intention_type == (
-			IntentionType.LAND_GARBAGE
-			if lands else
-			IntentionType.GARBAGE
+		if target == IntentionTypeTarget.BOTH else
+		(
+			trap
+			for trap in
+			cube.traps
+			if trap.intention_type == (
+				IntentionType.LAND_GARBAGE
+				if target == IntentionTypeTarget.LANDS_GARBAGE else
+				IntentionType.GARBAGE
+			)
 		)
 	)
 
@@ -231,7 +257,7 @@ def calculate(generations: int, trap_amount: int, lands: bool = False, max_delta
 	for trap in winner_traps:
 		trap._intention_type = (
 			IntentionType.LAND_GARBAGE
-			if lands else
+			if target == IntentionTypeTarget.LANDS_GARBAGE else
 			IntentionType.GARBAGE
 		)
 
@@ -250,22 +276,42 @@ def calculate(generations: int, trap_amount: int, lands: bool = False, max_delta
 
 	print('traps persisted')
 
+	path_switch = {
+		IntentionTypeTarget.GARBAGE: (
+			GARBAGE_OUT_PATH,
+			GARBAGE_NEW_OUT_PATH,
+			GARBAGE_REMOVED_OUT_PATH,
+		),
+		IntentionTypeTarget.LANDS_GARBAGE: (
+			GARBAGE_LANDS_OUT_PATH,
+			GARBAGE_LANDS_NEW_OUT_PATH,
+			GARBAGE_LANDS_REMOVED_OUT_PATH,
+		),
+		IntentionTypeTarget.BOTH: (
+			BOTH_OUT_PATH,
+			BOTH_NEW_OUT_PATH,
+			BOTH_REMOVED_OUT_PATH,
+		),
+	}
+
+	out, new_out, removed_out = path_switch[target]
+
 	proxy_laps(
 		laps = winner_traps,
 		image_loader = image_loader,
-		file_name = GARBAGE_LANDS_OUT_PATH if lands else GARBAGE_OUT_PATH,
+		file_name = out,
 	)
 
 	proxy_laps(
 		laps = new_traps,
 		image_loader = image_loader,
-		file_name = GARBAGE_LANDS_NEW_OUT_PATH if lands else GARBAGE_NEW_OUT_PATH,
+		file_name = new_out,
 	)
 
 	proxy_laps(
 		laps = removed_traps,
 		image_loader = image_loader,
-		file_name = GARBAGE_LANDS_REMOVED_OUT_PATH if lands else GARBAGE_REMOVED_OUT_PATH,
+		file_name = removed_out,
 	)
 
 	print('proxying done')
@@ -275,25 +321,21 @@ def main():
 	land_garbage_trap_amount = 22
 	garbage_trap_amount = 46
 
-	lands = False
+	target = IntentionTypeTarget.BOTH
+
+	trap_amount_switch = {
+		IntentionTypeTarget.GARBAGE: garbage_trap_amount,
+		IntentionTypeTarget.LANDS_GARBAGE: land_garbage_trap_amount,
+		IntentionTypeTarget.BOTH: garbage_trap_amount + land_garbage_trap_amount,
+	}
 
 	calculate(
-		generations = 1500,
-		trap_amount = land_garbage_trap_amount if lands else garbage_trap_amount,
-		lands = lands,
-		max_delta = 23,
+		generations = 20,
+		trap_amount = trap_amount_switch[target],
+		target = target,
+		max_delta = 0,
 	)
 
-	# Done in 446.507931470871 seconds
-	# Random fitness: 4.333538399779275e-23
-	# Current cube fitness: 0.0013272797010674638
-	# Winner fitness: 0.028478097190894232
-
-	# Done in 319.77151560783386 seconds
-	# Random fitness: 3.795032910321166e-24
-	# Current cube fitness: 0.001397470519954112
-	# Winner fitness: 0.0628689312432253
-	# New traps 45
 
 
 if __name__ == '__main__':

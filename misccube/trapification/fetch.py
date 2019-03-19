@@ -110,7 +110,7 @@ class ConstrainedNodeFetcher(object):
 
 		if s:
 			for group in s.split(','):
-				group = group.rstrip().lstrip()
+				group = group.rstrip().lstrip().replace('-', '')
 
 				if not group in self._legal_groups:
 					raise ConstrainedCubeablesFetchException(f'"{group}" not a legal group')
@@ -175,3 +175,8 @@ class ConstrainedNodeFetcher(object):
 
 	def fetch_garbage_lands(self) -> t.List[ConstrainedNode]:
 		return self._fetch(5)
+
+	def fetch_all(self) -> t.List[ConstrainedNode]:
+		garbage = self.fetch_garbage()
+		garbage.extend(self.fetch_garbage_lands())
+		return garbage
