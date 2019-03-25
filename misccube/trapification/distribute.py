@@ -137,6 +137,38 @@ _GROUP_WEIGHTS = {
 	'manland': 4,
 	'storage': 3,
 	'croprotate': 3,
+	'dnt': 3,
+	'equipment': 4,
+	'livingdeath': 3,
+	'eggskci': 3,
+	'hightide': 3,
+	'fatty': 3,
+	'walker': 4,
+	'blink': 2,
+	'miracles': 3,
+	'city': 4,
+	'wrath': 2,
+	'landtax': 4,
+	'discardvalue': 2,
+	'edict': 2,
+	'phoenix': 4,
+	'enchantress': 2,
+	'dork': 2,
+	'tinker': 3,
+	'highpowerhate': 2,
+	'affinity': 3,
+	'academy': 4,
+	'stompy': 2,
+	'shardless': 3,
+	'lanterns': 3,
+	'depths': 3,
+	'survival': 2,
+	'landstill': 2,
+	'moat': 4,
+	'combo': 3,
+	'kite': 3,
+	'haste': 3,
+	'fog': 3,
 }
 
 
@@ -149,7 +181,6 @@ GROUP_WEIGHTS = {key: value ** GROUP_WEIGHT_EXPONENT for key, value in _GROUP_WE
 def calculate(
 	generations: int,
 	trap_amount: int,
-	target: IntentionTypeTarget = IntentionTypeTarget.GARBAGE,
 	max_delta: t.Optional[int] = None,
 ):
 	random.seed()
@@ -161,30 +192,19 @@ def calculate(
 
 	trap_collection_persistor = TrapCollectionPersistor(db)
 
-	intention_switch = {
-		IntentionTypeTarget.GARBAGE: fetcher.fetch_garbage,
-		IntentionTypeTarget.LANDS_GARBAGE: fetcher.fetch_garbage_lands,
-		IntentionTypeTarget.BOTH: fetcher.fetch_all,
-	}
-
-	constrained_nodes = intention_switch[target]()
+	constrained_nodes = fetcher.fetch_garbage()
 
 	print(f'loaded {len(constrained_nodes)} nodes')
 
 	cube = cube_loader.load()
 
 	cube_traps = HashableMultiset(
+		trap
+		for trap in
 		cube.traps
-		if target == IntentionTypeTarget.BOTH else
-		(
-			trap
-			for trap in
-			cube.traps
-			if trap.intention_type == (
-				IntentionType.LAND_GARBAGE
-				if target == IntentionTypeTarget.LANDS_GARBAGE else
-				IntentionType.GARBAGE
-			)
+		if (
+			trap.intention_type == IntentionType.GARBAGE
+			or trap.intention_type == IntentionType.LAND_GARBAGE
 		)
 	)
 
@@ -223,9 +243,9 @@ def calculate(
 			constrained_nodes = constrained_nodes,
 			trap_amount = trap_amount,
 			constraint_set_blue_print = blue_print,
-			mate_chance = .45,
-			mutate_chance = .35,
-			tournament_size = 3,
+			mate_chance = .5,
+			mutate_chance = .45,
+			tournament_size = 4,
 			population_size = 600,
 		)
 
@@ -255,11 +275,7 @@ def calculate(
 
 	winner_traps = winner.as_trap_collection
 	for trap in winner_traps:
-		trap._intention_type = (
-			IntentionType.LAND_GARBAGE
-			if target == IntentionTypeTarget.LANDS_GARBAGE else
-			IntentionType.GARBAGE
-		)
+		trap._intention_type = IntentionType.GARBAGE
 
 	new_traps = winner_traps - cube_traps
 	removed_traps = cube_traps - winner_traps
@@ -276,25 +292,7 @@ def calculate(
 
 	print('traps persisted')
 
-	path_switch = {
-		IntentionTypeTarget.GARBAGE: (
-			GARBAGE_OUT_PATH,
-			GARBAGE_NEW_OUT_PATH,
-			GARBAGE_REMOVED_OUT_PATH,
-		),
-		IntentionTypeTarget.LANDS_GARBAGE: (
-			GARBAGE_LANDS_OUT_PATH,
-			GARBAGE_LANDS_NEW_OUT_PATH,
-			GARBAGE_LANDS_REMOVED_OUT_PATH,
-		),
-		IntentionTypeTarget.BOTH: (
-			BOTH_OUT_PATH,
-			BOTH_NEW_OUT_PATH,
-			BOTH_REMOVED_OUT_PATH,
-		),
-	}
-
-	out, new_out, removed_out = path_switch[target]
+	out, new_out, removed_out = GARBAGE_OUT_PATH, GARBAGE_NEW_OUT_PATH, GARBAGE_REMOVED_OUT_PATH
 
 	proxy_laps(
 		laps = winner_traps,
@@ -318,21 +316,11 @@ def calculate(
 
 
 def main():
-	land_garbage_trap_amount = 22
-	garbage_trap_amount = 46
-
-	target = IntentionTypeTarget.BOTH
-
-	trap_amount_switch = {
-		IntentionTypeTarget.GARBAGE: garbage_trap_amount,
-		IntentionTypeTarget.LANDS_GARBAGE: land_garbage_trap_amount,
-		IntentionTypeTarget.BOTH: garbage_trap_amount + land_garbage_trap_amount,
-	}
+	trap_amount = 108
 
 	calculate(
-		generations = 20,
-		trap_amount = trap_amount_switch[target],
-		target = target,
+		generations = 2200,
+		trap_amount = trap_amount,
 		max_delta = 0,
 	)
 

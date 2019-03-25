@@ -26,7 +26,7 @@ class ConstrainedNodeFetcher(object):
 		2: 5,
 		3: 15,
 		4: 30,
-		5: 60,
+		5: 55,
 	}
 
 	_legal_groups = {
@@ -87,7 +87,6 @@ class ConstrainedNodeFetcher(object):
 		'flash',
 		'wincon',
 		'vial',
-		# lands
 		'fixing',
 		'colorlessvalue',
 		'fetchable',
@@ -97,6 +96,39 @@ class ConstrainedNodeFetcher(object):
 		'manland',
 		'storage',
 		'croprotate',
+		'dnt',
+		'equipment',
+		'livingdeath',
+		'eggskci',
+		'hightide',
+		'fatty',
+		'walker',
+		'blink',
+		'miracles',
+		'city',
+		'wrath',
+		'landtax',
+		'discardvalue',
+		'edict',
+		'phoenix',
+		'enchantress',
+		'dork',
+		'tinker',
+		'landtax',
+		'highpowerhate',
+		'affinity',
+		'academy',
+		'stompy',
+		'shardless',
+		'lanterns',
+		'depths',
+		'survival',
+		'landstill',
+		'moat',
+		'combo',
+		'kite',
+		'haste',
+		'fog',
 	}
 
 	def __init__(self, db: CardDatabase, document_id: str = values.DOCUMENT_ID):
@@ -128,7 +160,7 @@ class ConstrainedNodeFetcher(object):
 			start_column = start_column,
 			start_row = 4,
 			end_column = start_column + 3,
-			end_row = 500,
+			end_row = 1000,
 		):
 			amount_cell, printings_cell, value_cell = row[:3]
 			groups_cell = row[3] if len(row) > 3 else ''

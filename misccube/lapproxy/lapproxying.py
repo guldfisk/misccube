@@ -93,8 +93,8 @@ def run():
 
 	lapper = LapProxyer(
 		cube_loader,
-		margin_size = .25,
-		card_margin_size = .0,
+		margin_size = .7,
+		card_margin_size = .05,
 	)
 
 	lapper.pdf_all_images()
