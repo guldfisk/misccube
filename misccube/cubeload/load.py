@@ -9,7 +9,7 @@ from mtgorp.models.serilization.strategies.jsonid import JsonId
 from magiccube.collections.cube import Cube
 
 from misccube import paths
-from misccube.cubeload.fetcher import CubeFetcher, CubeFetchException
+from misccube.cubeload.fetcher import CubeFetcher
 
 
 class CubeLoadException(Exception):
@@ -26,7 +26,7 @@ class CubeLoader(object):
 		self._fetcher = CubeFetcher(self._db)
 		self._strategy = JsonId(self._db)
 
-	def _get_all_local_cubes(self) -> t.Iterator[Cube]:
+	def _get_local_cube_paths(self) -> t.Iterator[t.Tuple[str, datetime.datetime]]:
 		if not os.path.exists(self.LOCAL_CUBES_PATH):
 			os.makedirs(self.LOCAL_CUBES_PATH)
 
@@ -54,13 +54,16 @@ class CubeLoader(object):
 		sorted_pairs = sorted(names_times, key=lambda item: item[1], reverse = True)
 
 		for name, time in sorted_pairs:
-			with open(os.path.join(self.LOCAL_CUBES_PATH, name), 'r') as f:
-				yield self._strategy.deserialize(Cube, f.read())
+			yield os.path.join(self.LOCAL_CUBES_PATH, name), time
 
+	def _get_all_local_cubes(self) -> t.Iterator[t.Tuple[Cube, datetime.datetime]]:
+		for path, time in self._get_local_cube_paths():
+			with open(path, 'r') as f:
+				yield self._strategy.deserialize(Cube, f.read()), time
 
 	def _get_current_local_cube(self) -> t.Optional[Cube]:
 		try:
-			return self._get_all_local_cubes().__next__()
+			return self._get_all_local_cubes().__next__()[0]
 		except StopIteration:
 			return None
 		
@@ -80,6 +83,14 @@ class CubeLoader(object):
 			'w',
 		) as f:
 			f.write(JsonId.serialize(cube))
+
+	def rollback(self) -> None:
+		try:
+			path, time = self._get_local_cube_paths().__next__()
+		except StopIteration:
+			return
+
+		os.remove(path)
 
 	def check_and_update(self) -> bool:
 		local_cube = self._get_current_local_cube()
@@ -102,7 +113,7 @@ class CubeLoader(object):
 
 		return cube
 	
-	def all_cubes(self) -> t.Iterator[Cube]:
+	def all_cubes(self) -> t.Iterator[t.Tuple[Cube, datetime.datetime]]:
 		if self._get_current_local_cube() is None:
 			if not self.check_and_update():
 				raise CubeLoadException()

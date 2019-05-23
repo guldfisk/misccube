@@ -76,11 +76,15 @@ class CubeFetcher(object):
 			major_dimension = 'COLUMNS',
 		)
 
-	def _parse_trap_cell(self, cell: str, arg: str) -> Trap:
+	def _parse_trap_cell(self, cell: str, arg: t.Optional[str] = None) -> Trap:
 		try:
 			return Trap(
 				node = self._printing_tree_parser.parse(cell),
-				intention_type = IntentionType(arg.split('-')[0]) if arg else None,
+				intention_type = (
+					IntentionType.GARBAGE
+					if arg is None or arg == '' else
+					IntentionType(arg.split('-')[0])
+				),
 			)
 		except (PrintingTreeParserException, AttributeError) as e:
 			raise CubeParseException(e)
@@ -147,7 +151,10 @@ class CubeFetcher(object):
 		for column, args in itertools.zip_longest(tsv, tsv[1:], fillvalue=['' for _ in range(len(tsv[-1]))]):
 
 			if column[0] == 'TRAPS':
-				traps = list(_parse_all_cells(column[2:], args[2:], self._parse_trap_cell))
+				traps.extend(list(_parse_all_cells(column[2:], args[2:], self._parse_trap_cell)))
+
+			if column[0] == 'GARBAGE_TRAPS':
+				traps.extend(list(_parse_all_cells(column[2:], (), self._parse_trap_cell)))
 
 			elif column[0] in ('W', 'U', 'B', 'R', 'G', 'HYBRID', 'GOLD', 'COLORLESS', 'LAND'):
 				printings.extend(_parse_all_cells(column[2:], args[2:], self._parse_printing))

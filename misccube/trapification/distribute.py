@@ -16,6 +16,7 @@ from mtgimg.load import Loader as ImageLoader
 
 from magiccube.laps.lap import Lap
 from magiccube.laps.traps.trap import IntentionType
+from magiccube.collections.delta import CubeDelta
 
 from misccube import paths
 from misccube.cubeload.load import CubeLoader
@@ -169,6 +170,7 @@ _GROUP_WEIGHTS = {
 	'kite': 3,
 	'haste': 3,
 	'fog': 3,
+	'threat': 4,
 }
 
 
@@ -182,6 +184,7 @@ def calculate(
 	generations: int,
 	trap_amount: int,
 	max_delta: t.Optional[int] = None,
+	create_proxy_pdfs: bool = True,
 ):
 	random.seed()
 
@@ -292,37 +295,89 @@ def calculate(
 
 	print('traps persisted')
 
-	out, new_out, removed_out = GARBAGE_OUT_PATH, GARBAGE_NEW_OUT_PATH, GARBAGE_REMOVED_OUT_PATH
+	if create_proxy_pdfs:
+		out, new_out, removed_out = GARBAGE_OUT_PATH, GARBAGE_NEW_OUT_PATH, GARBAGE_REMOVED_OUT_PATH
 
-	proxy_laps(
-		laps = winner_traps,
-		image_loader = image_loader,
-		file_name = out,
-	)
+		proxy_laps(
+			laps = winner_traps,
+			image_loader = image_loader,
+			file_name = out,
+		)
 
-	proxy_laps(
-		laps = new_traps,
-		image_loader = image_loader,
-		file_name = new_out,
-	)
+		proxy_laps(
+			laps = new_traps,
+			image_loader = image_loader,
+			file_name = new_out,
+		)
 
-	proxy_laps(
-		laps = removed_traps,
-		image_loader = image_loader,
-		file_name = removed_out,
-	)
+		proxy_laps(
+			laps = removed_traps,
+			image_loader = image_loader,
+			file_name = removed_out,
+		)
 
-	print('proxying done')
+		print('proxying done')
+
+
+def proxy_recent_distribution():
+	db = Loader.load()
+	image_loader = ImageLoader()
+	cube_loader = CubeLoader(db)
+
+	trap_collection_persistor = TrapCollectionPersistor(db)
+
+	recent_winner_trap_collection = trap_collection_persistor.get_most_recent_trap_collection()
+
+	print(recent_winner_trap_collection.minimal_string_list)
+
+	# cube = cube_loader.load()
+	#
+	# cube_traps = HashableMultiset(
+	# 	trap
+	# 	for trap in
+	# 	cube.traps
+	# 	if (
+	# 		trap.intention_type == IntentionType.GARBAGE
+	# 		or trap.intention_type == IntentionType.LAND_GARBAGE
+	# 	)
+	# )
+	#
+	# new_traps = recent_winner_trap_collection - cube_traps
+	# removed_traps = cube_traps - recent_winner_trap_collection
+	#
+	# out, new_out, removed_out = GARBAGE_OUT_PATH, GARBAGE_NEW_OUT_PATH, GARBAGE_REMOVED_OUT_PATH
+	#
+	# proxy_laps(
+	# 	laps=recent_winner_trap_collection,
+	# 	image_loader=image_loader,
+	# 	file_name=out,
+	# )
+	#
+	# proxy_laps(
+	# 	laps=new_traps,
+	# 	image_loader=image_loader,
+	# 	file_name=new_out,
+	# )
+	#
+	# proxy_laps(
+	# 	laps=removed_traps,
+	# 	image_loader=image_loader,
+	# 	file_name=removed_out,
+	# )
+	#
+	# print('proxying done')
 
 
 def main():
-	trap_amount = 108
-
-	calculate(
-		generations = 2200,
-		trap_amount = trap_amount,
-		max_delta = 0,
-	)
+	proxy_recent_distribution()
+	# trap_amount = 118
+	#
+	# calculate(
+	# 	generations = 1200,
+	# 	trap_amount = trap_amount,
+	# 	max_delta = 54,
+	# 	create_proxy_pdfs = False,
+	# )
 
 
 

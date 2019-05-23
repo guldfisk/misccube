@@ -13,6 +13,7 @@ from mtgorp.models.persistent.printing import Printing
 from mtgimg.load import Loader as ImageLoader
 
 from magiccube.collections.cube import Cube
+from magiccube.collections.delta import CubeDelta
 from magiccube.laps.lap import Lap
 
 from misccube.cubeload.load import CubeLoader
@@ -53,33 +54,28 @@ class LapProxyer(object):
 			file_name = os.path.join(self.OUT_DIR, 'all_laps.pdf')
 		)
 	
-	def pdf_difference_images(
+	def difference_report(
 		self
-	) -> t.Tuple[t.Collection[Printing], t.Collection[Printing], t.Collection[Lap], t.Collection[Lap]]:
+	) -> CubeDelta:
 
 		cubes = self._cube_loader.all_cubes()
 
-		new_cube, old_cube = next(cubes, Cube()), next(cubes, Cube())
+		current_cube, _ = next(cubes, Cube())
+		previous_cube, _ = next(cubes, Cube())
 
-		positive_difference, negative_difference = new_cube - old_cube, old_cube - new_cube
-
-		new_printings, old_printings = Multiset(new_cube.all_printings), Multiset(old_cube.all_printings)
-
-		additional_printings = new_printings.difference(old_printings)
-
-		removed_printings = old_printings.difference(new_printings)
+		delta = CubeDelta(previous_cube, current_cube)
 
 		self.proxy_cube(
-			cube = positive_difference,
+			cube = delta.new_pickables,
 			file_name = os.path.join(self.OUT_DIR, 'new_laps.pdf')
 		)
 
 		self.proxy_cube(
-			cube = negative_difference,
+			cube = delta.removed_pickables,
 			file_name = os.path.join(self.OUT_DIR, 'removed_laps.pdf')
 		)
 
-		return additional_printings, removed_printings, positive_difference, negative_difference
+		return delta
 
 
 def run():
@@ -99,12 +95,9 @@ def run():
 
 	lapper.pdf_all_images()
 
-	additional_printings, removed_printings, positive_difference, negative_difference = lapper.pdf_difference_images()
+	delta = lapper.difference_report()
 
-	print('Additional printings: ' + str(additional_printings))
-	print('Removed printings: ' + str(removed_printings))
-	print('Positive difference: ' + str(positive_difference))
-	print('Negative difference: ' + str(negative_difference))
+	print(delta.report)
 
 
 if __name__ == '__main__':

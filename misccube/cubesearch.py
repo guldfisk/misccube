@@ -14,6 +14,7 @@ def run():
 	cube_loader = CubeLoader(db)
 
 	cube = cube_loader.load()
+	# cubes = list(cube_loader.all_cubes())
 
 	cardboards = set(printing.cardboard for printing in cube.all_printings)
 

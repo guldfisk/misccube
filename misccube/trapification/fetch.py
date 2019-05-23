@@ -129,6 +129,7 @@ class ConstrainedNodeFetcher(object):
 		'kite',
 		'haste',
 		'fog',
+		'threat',
 	}
 
 	def __init__(self, db: CardDatabase, document_id: str = values.DOCUMENT_ID):
@@ -162,6 +163,11 @@ class ConstrainedNodeFetcher(object):
 			end_column = start_column + 3,
 			end_row = 1000,
 		):
+			if not row:
+				print('Empty row in trapables input!')
+				# TODO should probably be a runtime warning, but that requires logging...
+				continue
+
 			amount_cell, printings_cell, value_cell = row[:3]
 			groups_cell = row[3] if len(row) > 3 else ''
 
