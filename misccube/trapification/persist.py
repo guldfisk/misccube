@@ -27,7 +27,7 @@ class TrapCollection(Serializeable):
 	def minimal_string_list(self) -> str:
 		return '\n'.join(
 			sorted(
-				trap.node.minimal_string
+				trap.node.get_minimal_string()
 				for trap in
 				self._traps
 			)
