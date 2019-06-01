@@ -13,7 +13,7 @@ extra_files = package_files('misccube')
 setup(
 	name='misccube',
 	version='1.0',
-	packages=['mtgorp'],
+	packages=['misccube'],
 	package_data={'': extra_files},
 	dependency_links=[
 		'https://github.com/guldfisk/orp/tarball/master#egg=orp-1.0',
