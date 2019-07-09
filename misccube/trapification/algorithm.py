@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 from deap import base, creator, tools, algorithms
 
 from mtgorp.models.persistent.attributes.colors import Color
+from mtgorp.models.serilization.serializeable import Serializeable, serialization_model, Inflator
 from mtgorp.utilities.containers import HashableMultiset
 
 from magiccube.laps.traps.tree.printingtree import AllNode, PrintingNode
@@ -38,7 +39,7 @@ class UnweightedFitness(base.Fitness):
 	)
 
 
-class ConstrainedNode(object):
+class ConstrainedNode(Serializeable):
 
 	def __init__(self, value: float, node: PrintingNode, groups: t.Iterable[str] = ()):
 		self.value = value
@@ -59,13 +60,81 @@ class ConstrainedNode(object):
 			),
 		)
 
-		self._hash = hash(self.node)
+	def serialize(self) -> serialization_model:
+		return {
+			'node': self.node,
+			'value': self.value,
+			'groups': self.groups,
+		}
+
+	@classmethod
+	def deserialize(cls, value: serialization_model, inflator: Inflator) -> 'ConstrainedNode':
+		return cls(
+			node = PrintingNode.deserialize(
+				value['node'],
+				inflator,
+			),
+			value = value['value'],
+			groups = value['groups'],
+		)
+
+	def __hash__(self) -> int:
+		if not hasattr(self, '_hash'):
+			setattr(self, '_hash', hash((self.node, self.value, self.groups)))
+		return getattr(self, '_hash')
+
+	def __eq__(self, other: object) -> bool:
+		return (
+			isinstance(other, self.__class__)
+			and self.node == other.node
+			and self.value == other.value
+			and self.groups == other.groups
+		)
 
 	def __repr__(self):
 		return f'CC({self.node})'
 
 	def __deepcopy__(self, memodict: t.Dict):
 		return self
+
+
+class ConstrainedNodes(Serializeable):
+
+	def __init__(self, nodes: t.Iterable[ConstrainedNode]):
+		self._nodes = HashableMultiset(nodes)
+
+	def serialize(self) -> serialization_model:
+		return {
+			'nodes': self._nodes
+		}
+
+	@classmethod
+	def deserialize(cls, value: serialization_model, inflator: Inflator) -> 'ConstrainedNodes':
+		return cls(
+			nodes = (
+				ConstrainedNode.deserialize(node, inflator)
+				for node in
+				value['nodes']
+			)
+		)
+
+	def __iter__(self) -> t.Iterable[ConstrainedNode]:
+		return self._nodes.__iter__()
+
+	def __hash__(self) -> int:
+		return hash(self._nodes)
+
+	def __eq__(self, other: object) -> bool:
+		return (
+			isinstance(other, self.__class__)
+			and self._nodes == other._nodes
+		)
+
+	def __repr__(self) -> str:
+		return '{}({})'.format(
+			self.__class__.__name__,
+			self._nodes,
+		)
 
 
 class Individual(object):
