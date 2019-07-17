@@ -7,16 +7,16 @@ from enum import Enum
 
 from promise import Promise
 
+from yeetlong.multiset import FrozenMultiset
+
 from proxypdf.write import save_proxy_pdf
 
 from mtgorp.db.load import Loader
-from mtgorp.utilities.containers import HashableMultiset
 
 from mtgimg.load import Loader as ImageLoader
 
 from magiccube.laps.lap import Lap
 from magiccube.laps.traps.trap import IntentionType
-from magiccube.collections.delta import CubeDelta
 
 from misccube import paths
 from misccube.cubeload.load import CubeLoader
@@ -201,7 +201,7 @@ def calculate(
 
 	cube = cube_loader.load()
 
-	cube_traps = HashableMultiset(
+	cube_traps = FrozenMultiset(
 		trap
 		for trap in
 		cube.traps
@@ -332,7 +332,7 @@ def proxy_recent_distribution():
 
 	# cube = cube_loader.load()
 	#
-	# cube_traps = HashableMultiset(
+	# cube_traps = FrozenMultiset(
 	# 	trap
 	# 	for trap in
 	# 	cube.traps

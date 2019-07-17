@@ -2,19 +2,14 @@ import typing as t
 
 import os
 
-from multiset import Multiset
-
 from promise import Promise
 
 from proxypdf.write import save_proxy_pdf
-
-from mtgorp.models.persistent.printing import Printing
 
 from mtgimg.load import Loader as ImageLoader
 
 from magiccube.collections.cube import Cube
 from magiccube.collections.delta import CubeDelta
-from magiccube.laps.lap import Lap
 
 from misccube.cubeload.load import CubeLoader
 
@@ -66,12 +61,12 @@ class LapProxyer(object):
 		delta = CubeDelta(previous_cube, current_cube)
 
 		self.proxy_cube(
-			cube = delta.new_pickables,
+			cube = delta.new_cubeables,
 			file_name = os.path.join(self.OUT_DIR, 'new_laps.pdf')
 		)
 
 		self.proxy_cube(
-			cube = delta.removed_pickables,
+			cube = delta.removed_cubeables,
 			file_name = os.path.join(self.OUT_DIR, 'removed_laps.pdf')
 		)
 

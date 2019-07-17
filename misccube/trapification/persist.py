@@ -4,10 +4,11 @@ import typing as t
 import datetime
 import os
 
+from yeetlong.multiset import FrozenMultiset
+
 from mtgorp.db.database import CardDatabase
 from mtgorp.models.serilization.serializeable import Serializeable, serialization_model, Inflator
 from mtgorp.models.serilization.strategies.jsonid import JsonId
-from mtgorp.utilities.containers import HashableMultiset
 
 from magiccube.laps.traps.trap import Trap
 
@@ -17,10 +18,10 @@ from misccube import paths
 class TrapCollection(Serializeable):
 
 	def __init__(self, traps: t.Iterable[Trap]):
-		self._traps = HashableMultiset(traps)
+		self._traps = FrozenMultiset(traps)
 
 	@property
-	def traps(self) -> HashableMultiset[Trap]:
+	def traps(self) -> FrozenMultiset[Trap]:
 		return self._traps
 
 	@property

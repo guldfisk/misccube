@@ -7,16 +7,16 @@ import statistics
 import functools
 import operator
 import copy
-
 from abc import ABC, abstractmethod
 
 import matplotlib.pyplot as plt
 
 from deap import base, creator, tools, algorithms
 
+from yeetlong.multiset import FrozenMultiset
+
 from mtgorp.models.persistent.attributes.colors import Color
 from mtgorp.models.serilization.serializeable import Serializeable, serialization_model, Inflator
-from mtgorp.utilities.containers import HashableMultiset
 
 from magiccube.laps.traps.tree.printingtree import AllNode, PrintingNode
 from magiccube.laps.traps.trap import Trap
@@ -101,7 +101,7 @@ class ConstrainedNode(Serializeable):
 class ConstrainedNodes(Serializeable):
 
 	def __init__(self, nodes: t.Iterable[ConstrainedNode]):
-		self._nodes = HashableMultiset(nodes)
+		self._nodes = FrozenMultiset(nodes)
 
 	def serialize(self) -> serialization_model:
 		return {
@@ -144,7 +144,7 @@ class Individual(object):
 
 	@property
 	@abstractmethod
-	def as_trap_collection(self) -> HashableMultiset[Trap]:
+	def as_trap_collection(self) -> FrozenMultiset[Trap]:
 		pass
 
 
@@ -181,7 +181,7 @@ class TrapDistribution(Individual):
 		return self._trap_amount
 
 	@property
-	def as_trap_collection(self) -> HashableMultiset[Trap]:
+	def as_trap_collection(self) -> FrozenMultiset[Trap]:
 		traps = []
 
 		for trap in self.traps:
@@ -199,7 +199,7 @@ class TrapDistribution(Individual):
 
 			traps.append(Trap(AllNode(cubeables)))
 
-		return HashableMultiset(traps)
+		return FrozenMultiset(traps)
 
 	def __repr__(self) -> str:
 		return f'{self.__class__.__name__}({self.traps})'
@@ -299,7 +299,7 @@ class DistributionDelta(Individual):
 			if to_index == index:
 				self.node_moves[from_indexes] = self.get_available_trap_index()
 
-		changes = [] #type: t.List[t.Tuple[int, int]
+		changes = [] #type: t.List[t.Tuple[int, int]]
 
 		for indexes in self.node_moves:
 			if indexes[0] == index:
@@ -373,7 +373,7 @@ class DistributionDelta(Individual):
 		return modified_distribution
 
 	@property
-	def as_trap_collection(self) -> HashableMultiset[Trap]:
+	def as_trap_collection(self) -> FrozenMultiset[Trap]:
 		return self.trap_distribution.as_trap_collection
 
 
