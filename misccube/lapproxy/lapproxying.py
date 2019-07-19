@@ -25,7 +25,6 @@ class LapProxyer(object):
 		self._image_loader = ImageLoader()
 
 	def proxy_cube(self, cube: Cube, file_name: t.AnyStr) -> None:
-
 		promises = tuple(
 			self._image_loader.get_image(lap)
 			for lap in
@@ -95,5 +94,49 @@ def run():
 	print(delta.report)
 
 
+def proxies_from_strings():
+	from mtgorp.db.load import Loader
+
+	db = Loader.load()
+
+	strings = [
+		'(2# Vengevine|193556); Boil|4805; Decimate|31798; Kuldotha Forgemaster|215098; Shelldock Isle|146178; Underground River|11545',
+		'(3# Rite of Flame|121217); Crop Rotation|12432; Darksteel Citadel|45415; Everflowing Chalice|198374; Serum Visions|50145',
+	]
+
+	from magiccube.laps.traps.tree.parse import PrintingTreeParser
+	from magiccube.laps.traps.trap import Trap
+
+	parser = PrintingTreeParser(db)
+	image_loader = ImageLoader()
+
+	traps = [
+		Trap(
+			parser.parse(s)
+		)
+		for s in
+		strings
+	]
+
+	promises = [
+		image_loader.get_image(trap)
+		for trap in
+		traps
+	]
+
+	images = Promise.all(
+		promises
+	).get()
+
+	save_proxy_pdf(
+		file=os.path.join('out', 'select_traps.pdf'),
+		images=images,
+		margin_size=.7,
+		card_margin_size=.05,
+	)
+
+
+
+
 if __name__ == '__main__':
-	run()
+	proxies_from_strings()
