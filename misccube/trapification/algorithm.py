@@ -15,7 +15,6 @@ from deap import base, creator, tools, algorithms
 
 from yeetlong.multiset import FrozenMultiset
 
-from mtgorp.models.persistent.attributes.colors import Color
 from mtgorp.models.serilization.serializeable import Serializeable, serialization_model, Inflator
 
 from magiccube.laps.traps.tree.printingtree import AllNode, PrintingNode
@@ -42,29 +41,32 @@ class UnweightedFitness(base.Fitness):
 class ConstrainedNode(Serializeable):
 
 	def __init__(self, value: float, node: PrintingNode, groups: t.Iterable[str] = ()):
-		self.value = value
-		self.node = node
+		self._value = value
+		self._node = node
 
-		self.groups = frozenset(
-			itertools.chain(
-				groups,
-				(
-					color.name
-					for color in
-					Color
-					if (
-						len(node.children) == 1
-						and node.children.__iter__().__next__().cardboard.front_card.color == frozenset((color,))
-					)
-				)
-			),
-		)
+		self._groups = frozenset(groups)
+		if len(node.children) == 1:
+			colors = node.children.__iter__().__next__().cardboard.front_card.color
+			if len(colors) == 1:
+				self._groups |= colors
+
+	@property
+	def value(self) -> float:
+		return self._value
+
+	@property
+	def node(self) -> PrintingNode:
+		return self._node
+
+	@property
+	def groups(self) -> t.FrozenSet[str]:
+		return self._groups
 
 	def serialize(self) -> serialization_model:
 		return {
-			'node': self.node,
-			'value': self.value,
-			'groups': self.groups,
+			'node': self._node,
+			'value': self._value,
+			'groups': self._groups,
 		}
 
 	@classmethod
@@ -86,9 +88,9 @@ class ConstrainedNode(Serializeable):
 	def __eq__(self, other: object) -> bool:
 		return (
 			isinstance(other, self.__class__)
-			and self.node == other.node
-			and self.value == other.value
-			and self.groups == other.groups
+			and self._node == other._node
+			and self._value == other._value
+			and self._groups == other._groups
 		)
 
 	def __repr__(self):
@@ -910,7 +912,10 @@ class Distributor(object):
 		tournament_size: int = 3,
 		population_size: int = 300,
 	):
-		self._constrained_nodes = frozenset(constrained_nodes)
+		# TODO wtf is happening with these two
+		self._unique_constrained_nodes = frozenset(constrained_nodes)
+		self._constrained_nodes = FrozenMultiset(constrained_nodes)
+		
 		self._trap_amount = trap_amount
 		self._constraint_set_blue_print = constraint_set_blue_print
 		self._mate_chance = mate_chance
@@ -927,13 +932,13 @@ class Distributor(object):
 		self._population = self._toolbox.population(n=self._population_size) #type: t.List[TrapDistribution]
 
 		self._sample_random_population = [
-			TrapDistribution(self._constrained_nodes, self._trap_amount, random_initialization=True)
+			TrapDistribution(self._unique_constrained_nodes, self._trap_amount, random_initialization=True)
 			for _ in
 			range(self._population_size)
 		]
 
 		self._constraint_set = self._constraint_set_blue_print.realise(
-			self._constrained_nodes,
+			self._unique_constrained_nodes,
 			self._trap_amount,
 			self._sample_random_population,
 		)
@@ -974,7 +979,7 @@ class Distributor(object):
 		toolbox.register(
 			'individual',
 			TrapDistribution,
-			constrained_nodes = self._constrained_nodes,
+			constrained_nodes = self._unique_constrained_nodes,
 			trap_amount = self._trap_amount,
 			random_initialization = True,
 		)
@@ -1000,7 +1005,7 @@ class Distributor(object):
 
 	@property
 	def constrained_nodes(self) -> t.FrozenSet[ConstrainedNode]:
-		return self._constrained_nodes
+		return self._unique_constrained_nodes
 
 	@property
 	def trap_amount(self) -> int:

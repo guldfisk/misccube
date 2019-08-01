@@ -185,6 +185,7 @@ def calculate(
 	trap_amount: int,
 	max_delta: t.Optional[int] = None,
 	create_proxy_pdfs: bool = True,
+	persist_traps: bool = True,
 ):
 	random.seed()
 
@@ -287,13 +288,13 @@ def calculate(
 
 	trap_collection = TrapCollection(winner_traps)
 
-	trap_collection_persistor.persist(trap_collection)
-
 	print('\n------------------------------------------------\n')
 	print(trap_collection.minimal_string_list)
 	print('\n------------------------------------------------\n')
 
-	print('traps persisted')
+	if persist_traps:
+		trap_collection_persistor.persist(trap_collection)
+		print('traps persisted')
 
 	if create_proxy_pdfs:
 		out, new_out, removed_out = GARBAGE_OUT_PATH, GARBAGE_NEW_OUT_PATH, GARBAGE_REMOVED_OUT_PATH
@@ -369,15 +370,16 @@ def proxy_recent_distribution():
 
 
 def main():
-	proxy_recent_distribution()
-	# trap_amount = 118
-	#
-	# calculate(
-	# 	generations = 1200,
-	# 	trap_amount = trap_amount,
-	# 	max_delta = 54,
-	# 	create_proxy_pdfs = False,
-	# )
+	# proxy_recent_distribution()
+	trap_amount = 118
+
+	calculate(
+		generations = 100,
+		trap_amount = trap_amount,
+		# max_delta = 54,
+		create_proxy_pdfs = True,
+		persist_traps = False,
+	)
 
 
 
