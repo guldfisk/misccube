@@ -48,7 +48,7 @@ class ConstrainedNode(Serializeable):
 		if len(node.children) == 1:
 			colors = node.children.__iter__().__next__().cardboard.front_card.color
 			if len(colors) == 1:
-				self._groups |= colors
+				self._groups |= {color.name for color in colors}
 
 	@property
 	def value(self) -> float:
