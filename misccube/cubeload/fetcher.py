@@ -10,7 +10,7 @@ from sheetclient.client import GoogleSheetClient
 from mtgorp.db.database import CardDatabase
 from mtgorp.models.persistent.printing import Printing
 
-from magiccube.collections.cube import Cube, cubeable
+from magiccube.collections.cube import Cube, Cubeable
 from magiccube.laps.traps.tree.parse import PrintingTreeParser, PrintingTreeParserException
 from magiccube.laps.traps.trap import Trap, IntentionType
 from magiccube.laps.tickets.ticket import Ticket
@@ -19,7 +19,7 @@ from magiccube.laps.purples.purple import Purple
 from misccube import values
 
 
-T = t.TypeVar('T', bound = cubeable)
+T = t.TypeVar('T', bound = Cubeable)
 
 
 
