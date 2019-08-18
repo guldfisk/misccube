@@ -183,7 +183,8 @@ class ConstrainedNodeFetcher(object):
 				continue
 
 			try:
-				value = self._value_value_map[int(value_cell)]
+				# value = self._value_value_map[int(value_cell)]
+				value = int(value_cell)
 			except (ValueError, KeyError) as e:
 				exceptions.append(e)
 				continue
