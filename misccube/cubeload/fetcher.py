@@ -22,7 +22,6 @@ from misccube import values
 T = t.TypeVar('T', bound = Cubeable)
 
 
-
 SHEET_ID = '690106443'
 SHEET_NAME = 'liste'
 
