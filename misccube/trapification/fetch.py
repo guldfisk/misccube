@@ -1,13 +1,13 @@
 import typing as t
 
-
+from magiccube.collections.nodecollection import ConstrainedNode
 from sheetclient.client import GoogleSheetClient
 
 from mtgorp.db.database import CardDatabase
 
 from magiccube.laps.traps.tree.parse import PrintingTreeParser, PrintingTreeParserException
 
-from misccube.trapification.algorithm import ConstrainedNode
+# from misccube.trapification.algorithm import ConstrainedNode
 from misccube import values
 
 
@@ -20,14 +20,14 @@ class ConstrainedCubeablesFetchException(Exception):
 class ConstrainedNodeFetcher(object):
 	SHEET_NAME = 'trapables'
 
-	_value_value_map = {
-		0: 0,
-		1:  1,
-		2: 5,
-		3: 15,
-		4: 30,
-		5: 55,
-	}
+	# _value_value_map = {
+	# 	0: 0,
+	# 	1:  1,
+	# 	2: 5,
+	# 	3: 15,
+	# 	4: 30,
+	# 	5: 55,
+	# }
 
 	_legal_groups = {
 		'WHITE',
@@ -183,7 +183,8 @@ class ConstrainedNodeFetcher(object):
 				continue
 
 			try:
-				value = self._value_value_map[int(value_cell)]
+				# value = self._value_value_map[int(value_cell)]
+				value = int(value_cell)
 			except (ValueError, KeyError) as e:
 				exceptions.append(e)
 				continue
