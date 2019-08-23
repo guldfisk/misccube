@@ -260,6 +260,8 @@ def calculate(
 	st = time.time()
 
 	winner = distributor.evaluate(generations).best
+    
+    
 
 	print(f'Done in {time.time() - st} seconds')
 
