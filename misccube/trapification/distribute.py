@@ -12,18 +12,20 @@ from yeetlong.multiset import FrozenMultiset
 from proxypdf.write import save_proxy_pdf
 
 from mtgorp.db.load import Loader
+from mtgorp.models.serilization.strategies.jsonid import JsonId
 
 from mtgimg.load import Loader as ImageLoader
 
 from magiccube.laps.lap import Lap
 from magiccube.laps.traps.trap import IntentionType
+from magiccube.collections.nodecollection import ConstrainedNode as NewConstrainedNode
 
 from misccube import paths
 from misccube.cubeload.load import CubeLoader
 from misccube.trapification import algorithm
 from misccube.trapification.algorithm import Distributor, DeltaDistributor, ConstraintSetBluePrint
 from misccube.trapification.fetch import ConstrainedNodeFetcher
-from misccube.trapification.persist import TrapCollectionPersistor, TrapCollection
+from misccube.trapification.persist import TrapCollectionPersistor, TrapCollection, DistributionModel
 
 
 GARBAGE_OUT_PATH = os.path.join(paths.OUT_DIR, 'garbage_distribution.pdf')
@@ -40,137 +42,137 @@ BOTH_REMOVED_OUT_PATH = os.path.join(paths.OUT_DIR, 'full_garbage_distribution_r
 
 
 class IntentionTypeTarget(Enum):
-	GARBAGE = 'garbage'
-	LANDS_GARBAGE = 'lands_garbage'
-	BOTH = 'both'
+    GARBAGE = 'garbage'
+    LANDS_GARBAGE = 'lands_garbage'
+    BOTH = 'both'
 
 
 def proxy_laps(
-	laps: t.Iterable[Lap],
-	image_loader: ImageLoader,
-	file_name: str,
-	margin_size: float = .1,
-	card_margin_size: float = .01,
+    laps: t.Iterable[Lap],
+    image_loader: ImageLoader,
+    file_name: str,
+    margin_size: float = .1,
+    card_margin_size: float = .01,
 ) -> None:
-	promises = tuple(
-		image_loader.get_image(lap, save=False)
-		for lap in
-		laps
-	)
+    promises = tuple(
+        image_loader.get_image(lap, save=False)
+        for lap in
+        laps
+    )
 
-	images = Promise.all(
-		promises
-	).get()
+    images = Promise.all(
+        promises
+    ).get()
 
-	save_proxy_pdf(
-		file = file_name,
-		images = images,
-		margin_size = margin_size,
-		card_margin_size = card_margin_size,
-	)
+    save_proxy_pdf(
+        file = file_name,
+        images = images,
+        margin_size = margin_size,
+        card_margin_size = card_margin_size,
+    )
 
 
 _GROUP_WEIGHTS = {
-	'WHITE': 1,
-	'BLUE': 1.5,
-	'BLACK': 1,
-	'RED': 1,
-	'GREEN': 1,
-	'drawgo': 3,
-	'mud': 3,
-	'post': 4,
-	'midrange': 2,
-	'mill': 4,
-	'reanimate': 4,
-	'burn': 4,
-	'hatebear': 2,
-	'removal': 1,
-	'lock': 3,
-	'yardvalue': 3,
-	'ld': 3,
-	'storm': 4,
-	'tezz': 3,
-	'lands': 3,
-	'shatter': 3,
-	'bounce': 3,
-	'shadow': 4,
-	'stifle': 4,
-	'beat': 1,
-	'cheat': 4,
-	'pox': 3,
-	'counter': 3,
-	'discard': 2,
-	'cantrip': 4,
-	'balance': 3,
-	'stasis': 4,
-	'standstill': 3,
-	'whitehate': 4,
-	'bluehate': 4,
-	'blackhate': 4,
-	'redhate': 4,
-	'greenhate': 4,
-	'antiwaste': 4,
-	'delirium': 3,
-	'sacvalue': 2,
-	'lowtoughnesshate': 4,
-	'armageddon': 4,
-	'stax': 3,
-	'bloom': 3,
-	'weldingjar': 3,
-	'drawhate': 4,
-	'pluscard': 3,
-	'ramp': 3,
-	'devoteddruid': 4,
-	'fetchhate': 4,
-	'dragon': 2,
-	'company': 2,
-	'naturalorder': 3,
-	'flash': 3,
-	'wincon': 3,
-	'vial': 4,
-	# lands
-	'fixing': 3,
-	'colorlessvalue': 1,
-	'fetchable': 2,
-	'indestructable': 4,
-	'legendarymatters': 1,
-	'sol': 3,
-	'manland': 4,
-	'storage': 3,
-	'croprotate': 3,
-	'dnt': 3,
-	'equipment': 4,
-	'livingdeath': 3,
-	'eggskci': 3,
-	'hightide': 3,
-	'fatty': 3,
-	'walker': 4,
-	'blink': 2,
-	'miracles': 3,
-	'city': 4,
-	'wrath': 2,
-	'landtax': 4,
-	'discardvalue': 2,
-	'edict': 2,
-	'phoenix': 4,
-	'enchantress': 2,
-	'dork': 2,
-	'tinker': 3,
-	'highpowerhate': 2,
-	'affinity': 3,
-	'academy': 4,
-	'stompy': 2,
-	'shardless': 3,
-	'lanterns': 3,
-	'depths': 3,
-	'survival': 2,
-	'landstill': 2,
-	'moat': 4,
-	'combo': 3,
-	'kite': 3,
-	'haste': 3,
-	'fog': 3,
-	'threat': 4,
+    'WHITE': 1,
+    'BLUE': 1.5,
+    'BLACK': 1,
+    'RED': 1,
+    'GREEN': 1,
+    'drawgo': 3,
+    'mud': 3,
+    'post': 4,
+    'midrange': 2,
+    'mill': 4,
+    'reanimate': 4,
+    'burn': 4,
+    'hatebear': 2,
+    'removal': 1,
+    'lock': 3,
+    'yardvalue': 3,
+    'ld': 3,
+    'storm': 4,
+    'tezz': 3,
+    'lands': 3,
+    'shatter': 3,
+    'bounce': 3,
+    'shadow': 4,
+    'stifle': 4,
+    'beat': 1,
+    'cheat': 4,
+    'pox': 3,
+    'counter': 3,
+    'discard': 2,
+    'cantrip': 4,
+    'balance': 3,
+    'stasis': 4,
+    'standstill': 3,
+    'whitehate': 4,
+    'bluehate': 4,
+    'blackhate': 4,
+    'redhate': 4,
+    'greenhate': 4,
+    'antiwaste': 4,
+    'delirium': 3,
+    'sacvalue': 2,
+    'lowtoughnesshate': 4,
+    'armageddon': 4,
+    'stax': 3,
+    'bloom': 3,
+    'weldingjar': 3,
+    'drawhate': 4,
+    'pluscard': 3,
+    'ramp': 3,
+    'devoteddruid': 4,
+    'fetchhate': 4,
+    'dragon': 2,
+    'company': 2,
+    'naturalorder': 3,
+    'flash': 3,
+    'wincon': 3,
+    'vial': 4,
+    # lands
+    'fixing': 3,
+    'colorlessvalue': 1,
+    'fetchable': 2,
+    'indestructable': 4,
+    'legendarymatters': 1,
+    'sol': 3,
+    'manland': 4,
+    'storage': 3,
+    'croprotate': 3,
+    'dnt': 3,
+    'equipment': 4,
+    'livingdeath': 3,
+    'eggskci': 3,
+    'hightide': 3,
+    'fatty': 3,
+    'walker': 4,
+    'blink': 2,
+    'miracles': 3,
+    'city': 4,
+    'wrath': 2,
+    'landtax': 4,
+    'discardvalue': 2,
+    'edict': 2,
+    'phoenix': 4,
+    'enchantress': 2,
+    'dork': 2,
+    'tinker': 3,
+    'highpowerhate': 2,
+    'affinity': 3,
+    'academy': 4,
+    'stompy': 2,
+    'shardless': 3,
+    'lanterns': 3,
+    'depths': 3,
+    'survival': 2,
+    'landstill': 2,
+    'moat': 4,
+    'combo': 3,
+    'kite': 3,
+    'haste': 3,
+    'fog': 3,
+    'threat': 4,
 }
 
 
@@ -181,209 +183,228 @@ GROUP_WEIGHTS = {key: value ** GROUP_WEIGHT_EXPONENT for key, value in _GROUP_WE
 
 
 def calculate(
-	generations: int,
-	trap_amount: int,
-	max_delta: t.Optional[int] = None,
-	create_proxy_pdfs: bool = True,
-	persist_traps: bool = True,
+    generations: int,
+    trap_amount: int,
+    max_delta: t.Optional[int] = None,
+    create_proxy_pdfs: bool = True,
+    persist_traps: bool = True,
 ):
-	random.seed()
+    random.seed()
 
-	db = Loader.load()
-	image_loader = ImageLoader()
-	fetcher = ConstrainedNodeFetcher(db)
-	cube_loader = CubeLoader(db)
+    db = Loader.load()
+    image_loader = ImageLoader()
+    fetcher = ConstrainedNodeFetcher(db)
+    cube_loader = CubeLoader(db)
 
-	trap_collection_persistor = TrapCollectionPersistor(db)
+    trap_collection_persistor = TrapCollectionPersistor(db)
 
-	constrained_nodes = fetcher.fetch_garbage()
+    constrained_nodes = fetcher.fetch_garbage()
 
-	print(f'loaded {len(constrained_nodes)} nodes')
+    print(f'loaded {len(constrained_nodes)} nodes')
 
-	cube = cube_loader.load()
+    cube = cube_loader.load()
 
-	cube_traps = FrozenMultiset(
-		trap
-		for trap in
-		cube.traps
-		if (
-			trap.intention_type == IntentionType.GARBAGE
-			or trap.intention_type == IntentionType.LAND_GARBAGE
-		)
-	)
+    cube_traps = FrozenMultiset(
+        trap
+        for trap in
+        cube.traps
+        if (
+            trap.intention_type == IntentionType.GARBAGE
+            or trap.intention_type == IntentionType.LAND_GARBAGE
+        )
+    )
 
-	blue_print = ConstraintSetBluePrint(
-		(
-			algorithm.ValueDistributionHomogeneityConstraint,
-			2,
-			{},
-		),
-		(
-			algorithm.GroupExclusivityConstraint,
-			2,
-			{'group_weights': GROUP_WEIGHTS},
-		),
-		(
-			algorithm.SizeHomogeneityConstraint,
-			1,
-			{},
-		),
-	)
+    blue_print = ConstraintSetBluePrint(
+        (
+            algorithm.ValueDistributionHomogeneityConstraint,
+            2,
+            {},
+        ),
+        (
+            algorithm.GroupExclusivityConstraint,
+            2,
+            {'group_weights': GROUP_WEIGHTS},
+        ),
+        (
+            algorithm.SizeHomogeneityConstraint,
+            1,
+            {},
+        ),
+    )
 
-	if max_delta is not None and max_delta > 0:
-		distributor = DeltaDistributor(
-			constrained_nodes = constrained_nodes,
-			trap_amount = trap_amount,
-			origin_trap_collection = cube_traps,
-			constraint_set_blue_print = blue_print,
-			max_trap_delta = max_delta,
-			mate_chance = .45,
-			mutate_chance = .35,
-			tournament_size = 3,
-			population_size = 600,
-		)
-	else:
-		distributor = Distributor(
-			constrained_nodes = constrained_nodes,
-			trap_amount = trap_amount,
-			constraint_set_blue_print = blue_print,
-			mate_chance = .5,
-			mutate_chance = .45,
-			tournament_size = 4,
-			population_size = 600,
-		)
+    if max_delta is not None and max_delta > 0:
+        distributor = DeltaDistributor(
+            constrained_nodes = constrained_nodes,
+            trap_amount = trap_amount,
+            origin_trap_collection = cube_traps,
+            constraint_set_blue_print = blue_print,
+            max_trap_delta = max_delta,
+            mate_chance = .45,
+            mutate_chance = .35,
+            tournament_size = 3,
+            population_size = 600,
+        )
+    else:
+        distributor = Distributor(
+            constrained_nodes = constrained_nodes,
+            trap_amount = trap_amount,
+            constraint_set_blue_print = blue_print,
+            mate_chance = .5,
+            mutate_chance = .45,
+            tournament_size = 4,
+            population_size = 400,
+        )
 
-	random_fitness = statistics.mean(
-		map(distributor.constraint_set.total_score, distributor.sample_random_population)
-	)
+    random_fitness = statistics.mean(
+        map(distributor.constraint_set.total_score, distributor.sample_random_population)
+    )
 
-	st = time.time()
+    st = time.time()
 
-	winner = distributor.evaluate(generations).best
-    
-    
+    winner = distributor.evaluate(generations).best
 
-	print(f'Done in {time.time() - st} seconds')
+    print(f'Done in {time.time() - st} seconds')
 
-	print('Random fitness:', random_fitness)
+    distribution_model = DistributionModel(
+        tuple(
+            tuple(
+                NewConstrainedNode(
+                    node.value,
+                    node.node,
+                    node.groups,
+                )
+                for node in
+                trap
+            )
+            for trap in
+            winner.traps
+        )
+    )
 
-	try:
-		print('Current cube fitness:', distributor.evaluate_cube(cube_traps))
-	except ValueError:
-		print('Nodes does not match current cube')
-		_, added, removed = distributor.trap_collection_to_trap_distribution(cube_traps, constrained_nodes)
-		print('added:', added)
-		print('removed:', removed)
+    print('saved nodes:', sum(map(len, distribution_model.traps)))
 
-	print('Winner fitness:', winner.fitness.values[0])
+    with open(os.path.join(paths.OUT_DIR, 'old_distribution.json'), 'w') as f:
+        f.write(JsonId(db).serialize(distribution_model))
 
-	distributor.show_plot()
+    print('Random fitness:', random_fitness)
 
-	winner_traps = winner.as_trap_collection
-	for trap in winner_traps:
-		trap._intention_type = IntentionType.GARBAGE
+    try:
+        print('Current cube fitness:', distributor.evaluate_cube(cube_traps))
+    except ValueError:
+        print('Nodes does not match current cube')
+        _, added, removed = distributor.trap_collection_to_trap_distribution(cube_traps, constrained_nodes)
+        print('added:', added)
+        print('removed:', removed)
 
-	new_traps = winner_traps - cube_traps
-	removed_traps = cube_traps - winner_traps
+    print('Winner fitness:', winner.fitness.values[0])
 
-	print('New traps', len(new_traps))
+    distributor.show_plot()
 
-	trap_collection = TrapCollection(winner_traps)
+    winner_traps = winner.as_trap_collection
+    for trap in winner_traps:
+        trap._intention_type = IntentionType.GARBAGE
 
-	print('\n------------------------------------------------\n')
-	print(trap_collection.minimal_string_list)
-	print('\n------------------------------------------------\n')
+    new_traps = winner_traps - cube_traps
+    removed_traps = cube_traps - winner_traps
 
-	if persist_traps:
-		trap_collection_persistor.persist(trap_collection)
-		print('traps persisted')
+    print('New traps', len(new_traps))
 
-	if create_proxy_pdfs:
-		out, new_out, removed_out = GARBAGE_OUT_PATH, GARBAGE_NEW_OUT_PATH, GARBAGE_REMOVED_OUT_PATH
+    trap_collection = TrapCollection(winner_traps)
 
-		proxy_laps(
-			laps = winner_traps,
-			image_loader = image_loader,
-			file_name = out,
-		)
+    print('\n------------------------------------------------\n')
+    print(trap_collection.minimal_string_list)
+    print('\n------------------------------------------------\n')
 
-		proxy_laps(
-			laps = new_traps,
-			image_loader = image_loader,
-			file_name = new_out,
-		)
+    if persist_traps:
+        trap_collection_persistor.persist(trap_collection)
+        print('traps persisted')
 
-		proxy_laps(
-			laps = removed_traps,
-			image_loader = image_loader,
-			file_name = removed_out,
-		)
+    if create_proxy_pdfs:
+        out, new_out, removed_out = GARBAGE_OUT_PATH, GARBAGE_NEW_OUT_PATH, GARBAGE_REMOVED_OUT_PATH
 
-		print('proxying done')
+        proxy_laps(
+            laps = winner_traps,
+            image_loader = image_loader,
+            file_name = out,
+        )
+
+        proxy_laps(
+            laps = new_traps,
+            image_loader = image_loader,
+            file_name = new_out,
+        )
+
+        proxy_laps(
+            laps = removed_traps,
+            image_loader = image_loader,
+            file_name = removed_out,
+        )
+
+        print('proxying done')
 
 
 def proxy_recent_distribution():
-	db = Loader.load()
-	image_loader = ImageLoader()
-	cube_loader = CubeLoader(db)
+    db = Loader.load()
+    image_loader = ImageLoader()
+    cube_loader = CubeLoader(db)
 
-	trap_collection_persistor = TrapCollectionPersistor(db)
+    trap_collection_persistor = TrapCollectionPersistor(db)
 
-	recent_winner_trap_collection = trap_collection_persistor.get_most_recent_trap_collection()
+    recent_winner_trap_collection = trap_collection_persistor.get_most_recent_trap_collection()
 
-	print(recent_winner_trap_collection.minimal_string_list)
+    print(recent_winner_trap_collection.minimal_string_list)
 
-	# cube = cube_loader.load()
-	#
-	# cube_traps = FrozenMultiset(
-	# 	trap
-	# 	for trap in
-	# 	cube.traps
-	# 	if (
-	# 		trap.intention_type == IntentionType.GARBAGE
-	# 		or trap.intention_type == IntentionType.LAND_GARBAGE
-	# 	)
-	# )
-	#
-	# new_traps = recent_winner_trap_collection - cube_traps
-	# removed_traps = cube_traps - recent_winner_trap_collection
-	#
-	# out, new_out, removed_out = GARBAGE_OUT_PATH, GARBAGE_NEW_OUT_PATH, GARBAGE_REMOVED_OUT_PATH
-	#
-	# proxy_laps(
-	# 	laps=recent_winner_trap_collection,
-	# 	image_loader=image_loader,
-	# 	file_name=out,
-	# )
-	#
-	# proxy_laps(
-	# 	laps=new_traps,
-	# 	image_loader=image_loader,
-	# 	file_name=new_out,
-	# )
-	#
-	# proxy_laps(
-	# 	laps=removed_traps,
-	# 	image_loader=image_loader,
-	# 	file_name=removed_out,
-	# )
-	#
-	# print('proxying done')
+    # cube = cube_loader.load()
+    #
+    # cube_traps = FrozenMultiset(
+    #     trap
+    #     for trap in
+    #     cube.traps
+    #     if (
+    #         trap.intention_type == IntentionType.GARBAGE
+    #         or trap.intention_type == IntentionType.LAND_GARBAGE
+    #     )
+    # )
+    #
+    # new_traps = recent_winner_trap_collection - cube_traps
+    # removed_traps = cube_traps - recent_winner_trap_collection
+    #
+    # out, new_out, removed_out = GARBAGE_OUT_PATH, GARBAGE_NEW_OUT_PATH, GARBAGE_REMOVED_OUT_PATH
+    #
+    # proxy_laps(
+    #     laps=recent_winner_trap_collection,
+    #     image_loader=image_loader,
+    #     file_name=out,
+    # )
+    #
+    # proxy_laps(
+    #     laps=new_traps,
+    #     image_loader=image_loader,
+    #     file_name=new_out,
+    # )
+    #
+    # proxy_laps(
+    #     laps=removed_traps,
+    #     image_loader=image_loader,
+    #     file_name=removed_out,
+    # )
+    #
+    # print('proxying done')
 
 
 def main():
-	# proxy_recent_distribution()
-	trap_amount = 118
+    # proxy_recent_distribution()
+    trap_amount = 118
 
-	calculate(
-		generations = 100,
-		trap_amount = trap_amount,
-		# max_delta = 54,
-		create_proxy_pdfs = True,
-		persist_traps = False,
-	)
+    calculate(
+        generations = 1000,
+        trap_amount = trap_amount,
+        # max_delta = 54,
+        create_proxy_pdfs = False,
+        persist_traps = True,
+    )
 
 
 
 if __name__ == '__main__':
-	main()
+    main()

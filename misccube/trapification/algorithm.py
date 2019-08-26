@@ -913,9 +913,9 @@ class Distributor(object):
 		population_size: int = 300,
 	):
 		# TODO wtf is happening with these two
-		self._unique_constrained_nodes = frozenset(constrained_nodes)
-		self._constrained_nodes = FrozenMultiset(constrained_nodes)
-		
+		self._constrained_nodes = list(constrained_nodes)
+		self._unique_constrained_nodes = self._constrained_nodes
+
 		self._trap_amount = trap_amount
 		self._constraint_set_blue_print = constraint_set_blue_print
 		self._mate_chance = mate_chance
