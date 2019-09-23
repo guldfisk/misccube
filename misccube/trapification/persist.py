@@ -56,48 +56,48 @@ class DistributionModel(Serializeable):
         )
 
 
-class TrapCollection(Serializeable):
-
-    def __init__(self, traps: t.Iterable[Trap]):
-        self._traps = FrozenMultiset(traps)
-
-    @property
-    def traps(self) -> FrozenMultiset[Trap]:
-        return self._traps
-
-    @property
-    def minimal_string_list(self) -> str:
-        return '\n'.join(
-            sorted(
-                trap.node.get_minimal_string()
-                for trap in
-                self._traps
-            )
-        )
-
-    def serialize(self) -> serialization_model:
-        return {
-            'traps': self._traps,
-        }
-
-    @classmethod
-    def deserialize(cls, value: serialization_model, inflator: Inflator) -> 'Serializeable':
-        return cls(
-            (
-                Trap.deserialize(trap, inflator)
-                for trap in
-                value.get('traps', ())
-            )
-        )
-
-    def __hash__(self) -> int:
-        return hash(self._traps)
-
-    def __eq__(self, other: object) -> bool:
-        return (
-            isinstance(other, self.__class__)
-            and self._traps == other._traps
-        )
+# class TrapCollection(Serializeable):
+# 
+#     def __init__(self, traps: t.Iterable[Trap]):
+#         self._traps = FrozenMultiset(traps)
+# 
+#     @property
+#     def traps(self) -> FrozenMultiset[Trap]:
+#         return self._traps
+# 
+#     @property
+#     def minimal_string_list(self) -> str:
+#         return '\n'.join(
+#             sorted(
+#                 trap.node.get_minimal_string()
+#                 for trap in
+#                 self._traps
+#             )
+#         )
+# 
+#     def serialize(self) -> serialization_model:
+#         return {
+#             'traps': self._traps,
+#         }
+# 
+#     @classmethod
+#     def deserialize(cls, value: serialization_model, inflator: Inflator) -> 'Serializeable':
+#         return cls(
+#             (
+#                 Trap.deserialize(trap, inflator)
+#                 for trap in
+#                 value.get('traps', ())
+#             )
+#         )
+# 
+#     def __hash__(self) -> int:
+#         return hash(self._traps)
+# 
+#     def __eq__(self, other: object) -> bool:
+#         return (
+#             isinstance(other, self.__class__)
+#             and self._traps == other._traps
+#         )
 
 
 class TrapCollectionPersistor(object):
